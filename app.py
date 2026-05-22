@@ -6,13 +6,13 @@ import random
 # Proje dizin ayarları
 sys.path.insert(0, os.path.dirname(__file__))
 
-# TBF 5'li Majör ve Kart Sistemleri Importları (Tek ve Temiz Temel Blok)
+# TBF 5'li Majör ve Kart Sistemleri Importları (Güvenli ve Temiz)
 from cards import deal_hands, Suit, SUIT_SYMBOLS, SUIT_NAMES_TR, RANK_SYMBOLS
 from evaluator import HandEvaluator
 from bidding_system import (
     opening_bid, opening_bid_trace, suggest_response, rkcb_response,
     response_to_1nt, response_to_major, BID_PASS, BID_DBL, suit_symbol,
-    overcall_or_double, respond_to_double, _bid_rank, _find_doubled_suit_bid
+    overcall_or_double, respond_to_double, _bid_rank
 )
 
 st.set_page_config(page_title="Briç Deklere Simülatörü", page_icon="🃏", layout="wide")
@@ -97,7 +97,7 @@ def is_auction_over(bids: list) -> bool:
             if last_real.startswith("4") or ("NT" in last_real and int(last_real[0]) >= 3):
                 pass 
             else:
-                return False  # Zona ulaşılmadıysa pas döngüsüyle ihale BİTEMEZ!
+                return False
 
     last_three = [b for _, b, _ in bids[-3:]]
     if all(b == BID_PASS for b in last_three):
@@ -109,6 +109,13 @@ def last_real_bid_and_pos(bids: list) -> tuple[str | None, int | None]:
     for b_pos, bid, _ in reversed(bids):
         if bid not in (BID_PASS, BID_DBL, "RKON"): return bid, b_pos
     return None, None
+
+def local_find_doubled_suit_bid(bids: list, partner_pos: int) -> str:
+    """Import krizini çözen yerel kontr hedefi bulucu"""
+    for pos, bid, _ in reversed(bids):
+        if pos == partner_pos and bid not in (BID_PASS, BID_DBL, "RKON"):
+            return bid
+    return "1♣"
 
 def robot_bid_for_pos(pos: int, hands: list, bids: list) -> tuple[str, str]:
     ev, partner, seat = HandEvaluator(hands[pos]), (pos + 2) % 4, len(bids) + 1
@@ -132,12 +139,8 @@ def robot_bid_for_pos(pos: int, hands: list, bids: list) -> tuple[str, str]:
     
     if last_real_pos == partner:
         if last_real == BID_DBL:
-            try:
-                # _find_doubled_suit_bid güvenli çağrısı
-                doubled = _find_doubled_suit_bid(bids, partner)
-                suggested_bid, expl = respond_to_double(doubled, ev)
-            except Exception:
-                suggested_bid, expl = BID_PASS, "Pas"
+            doubled = local_find_doubled_suit_bid(bids, partner)
+            suggested_bid, expl = respond_to_double(doubled, ev)
         else:
             s = extract_suit(last_real)
             suggested_bid, expl = suggest_response(last_real, s, ev, 12)
@@ -481,7 +484,7 @@ def render_opening_trace(steps: list[dict]) -> None:
         elif hit: icon, bg, border, color, weight, opacity = "✅", "#E8F5E9", "#2E7D32", "#1B5E20", "bold", "1"
         else: icon, bg, border, color, weight, opacity = "↷", "transparent", "transparent", "#78909C", "normal", "0.75"
         rows_html.append(f'<div style="display:flex;align-items:flex-start;margin:3px 0;padding:4px 10px;background:{bg};border-left:3px solid {border};border-radius:4px;opacity:{opacity}"><span style="min-width:22px;font-size:1em;flex-shrink:0">{icon}</span><span style="font-size:0.83em;color:{color};font-weight:{weight};line-height:1.45"><b>Adım {n}: {name}</b><span style="font-weight:normal;margin-left:6px">— {detail}</span></span></div>')
-    st.markdown('<div style="background:#FAFAFA;border:1px solid #E0E0E0;border-radius:8px;padding:8px 6px;margin-bottom:10px">' + "".join(rows_html) + '</div>', undamaged_allow_html=True)
+    st.markdown('<div style="background:#FAFAFA;border:1px solid #E0E0E0;border-radius:8px;padding:8px 6px;margin-bottom:10px">' + "".join(rows_html) + '</div>', unsafe_allow_html=True)
 
 def bid_buttons(bids_list: list[str], cols_per_row: int = 5):
     if st.session_state["feedback"] is not None: return
