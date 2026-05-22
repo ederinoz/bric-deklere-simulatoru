@@ -2,13 +2,17 @@ import streamlit as st
 import sys
 import os
 import random
+
+# Proje dizin ayarları
 sys.path.insert(0, os.path.dirname(__file__))
+
+# TBF 5'li Majör ve Kart Sistemleri Importları (Tek ve Temiz Temel Blok)
 from cards import deal_hands, Suit, SUIT_SYMBOLS, SUIT_NAMES_TR, RANK_SYMBOLS
 from evaluator import HandEvaluator
 from bidding_system import (
     opening_bid, opening_bid_trace, suggest_response, rkcb_response,
     response_to_1nt, response_to_major, BID_PASS, BID_DBL, suit_symbol,
-    overcall_or_double, respond_to_double, _bid_rank
+    overcall_or_double, respond_to_double, _bid_rank, _find_doubled_suit_bid
 )
 
 st.set_page_config(page_title="Briç Deklere Simülatörü", page_icon="🃏", layout="wide")
@@ -128,8 +132,12 @@ def robot_bid_for_pos(pos: int, hands: list, bids: list) -> tuple[str, str]:
     
     if last_real_pos == partner:
         if last_real == BID_DBL:
-            doubled = _find_doubled_suit_bid(bids, partner)
-            suggested_bid, expl = respond_to_double(doubled, ev)
+            try:
+                # _find_doubled_suit_bid güvenli çağrısı
+                doubled = _find_doubled_suit_bid(bids, partner)
+                suggested_bid, expl = respond_to_double(doubled, ev)
+            except Exception:
+                suggested_bid, expl = BID_PASS, "Pas"
         else:
             s = extract_suit(last_real)
             suggested_bid, expl = suggest_response(last_real, s, ev, 12)
@@ -151,11 +159,8 @@ def robot_bid_for_pos(pos: int, hands: list, bids: list) -> tuple[str, str]:
             current_idx = ALL_BIDS_ORDER.index(last_real)
             suggested_idx = ALL_BIDS_ORDER.index(suggested_bid)
             
-            # Eğer botun üretmeye çalıştığı deklere, masadaki deklereye eşit veya altındaysa
             if suggested_idx <= current_idx:
-                # Özel Durum: Doğu ortağının Kupa açışını desteklemek istiyor ama seviye yetmiyorsa yasal sınıra yükselt
                 if "♥" in suggested_bid and current_idx < ALL_BIDS_ORDER.index("3♥"):
-                    # Eğer el 3 seviyesine yetecek kadar güçlü bir fit desteğiyse 3'e yükselt, zayıfsa PAS geç
                     if ev.length(Suit.HEARTS) >= 3 and ev.hcp() >= 6:
                         suggested_bid, expl = "3♥", "Ortağın Kupa açışına rekabetçi destek (Seviye düzeltildi)"
                     else:
@@ -175,35 +180,29 @@ def correct_south_live(bids: list, hands: list) -> tuple[str, str]:
     south_last = next((b for p, b, _ in reversed(bids) if p == 2 and b != BID_PASS), None)
     bids_strings = [b for _, b, _ in bids]
 
-    # En son konuşan ortağımız Kuzey (0) ise natürel sistem kuralları
     if last_real_pos == 0:
         if last_real == BID_DBL: return respond_to_double(last_real, s_ev)
         
-        # Eğer ortak 2NT dediyse ve elimiz çok güçlü bir koz fitine sahipse sanzatuyu reddet, 4 Majör de!
         if last_real == "2NT" and s_ev.length(Suit.SPADES) >= 5:
             return "4♠", "Ortağın dengeli davet/GF dekleresine karşı 5'li güçlü majörümüzle koz kontratını seçiyoruz."
             
         return suggest_response(last_real, extract_suit(last_real), s_ev, n_ev.hcp())
 
-    # En son rakipler konuştuysa araya giriş ve rekabet kuralları
     if last_real_pos in (1, 3):
         north_last = next((b for p, b, _ in reversed(bids) if p == 0 and b != BID_PASS), None)
         if north_last is None: 
             return overcall_or_double(s_ev, last_real)
         
         n_suit = extract_suit(north_last)
-        # Ortağımızın araya girişine (Örn 3 Sinek) destek veriyorsak ve yasal sınır kurtarıyorsa
         if n_suit and s_ev.length(n_suit) >= 3 and s_ev.hcp() >= 6:
             sym = suit_symbol(n_suit)
             target_bid = f"4{sym}" if s_ev.hcp() >= 10 else f"3{sym}"
-            # Eğer ortağın dekleresi zaten bizim hedefimizden yüksekse (Kuzey 3C dedi, biz 3C diyemeyiz)
             try:
                 if ALL_BIDS_ORDER.index(target_bid) > ALL_BIDS_ORDER.index(last_real):
                     return target_bid, f"Partnerin yarışma rengine destek – {sym}"
             except ValueError:
                 pass
 
-    # GÜNEY İÇİN GF AKTİFKEN PAS ÖNERME KORUMASI
     if "2NT" in bids_strings and not (last_real and (last_real.startswith("4") or "NT" in last_real)):
         n_suit = st.session_state.get("north_suit")
         if n_suit:
@@ -212,14 +211,13 @@ def correct_south_live(bids: list, hands: list) -> tuple[str, str]:
     return BID_PASS, "Pas önerilir"
 
 def advance_live_robots():
-    """Robotların sıra Güney'e (2) gelene kadar oynamasını sağlayan ana döngü"""
     hands, bids = st.session_state["hands"], st.session_state["live_bids"]
     for _ in range(20):
         if is_auction_over(bids):
             st.session_state["live_done"] = True
             return
         turn = st.session_state["live_turn"]
-        if turn == 2:  # Sıra Güney'de (Sizde) ise dur, kullanıcının tıklamasını bekle
+        if turn == 2: 
             return
         bid, expl = robot_bid_for_pos(turn, hands, bids)
         bids.append((turn, bid, expl))
@@ -268,7 +266,6 @@ def deal_new_hand():
     st.session_state["north_bid"], st.session_state["north_suit"] = nb, extract_suit(nb)
 
     if mode == "live":
-        # Dağıtıcıyı 0-3 arası (Kuzey, Doğu, Güney, Batı) tamamen özgürce seçiyoruz
         dealer = random.randint(0, 3)
         zone = random.choice(["Kimse", "K-G", "D-B", "Herkes"])
         st.session_state["live_dealer"] = dealer
@@ -277,7 +274,6 @@ def deal_new_hand():
         st.session_state["live_turn"] = dealer
         st.session_state["live_done"] = False
 
-        # SIRA SİZDE (GÜNEY = 2) DEĞİLSE, ROBOTLAR KENDİ ARALARINDA SIRA SİZE GELENE KADAR AKITSIN
         if dealer != 2:
             advance_live_robots()
 
@@ -485,7 +481,7 @@ def render_opening_trace(steps: list[dict]) -> None:
         elif hit: icon, bg, border, color, weight, opacity = "✅", "#E8F5E9", "#2E7D32", "#1B5E20", "bold", "1"
         else: icon, bg, border, color, weight, opacity = "↷", "transparent", "transparent", "#78909C", "normal", "0.75"
         rows_html.append(f'<div style="display:flex;align-items:flex-start;margin:3px 0;padding:4px 10px;background:{bg};border-left:3px solid {border};border-radius:4px;opacity:{opacity}"><span style="min-width:22px;font-size:1em;flex-shrink:0">{icon}</span><span style="font-size:0.83em;color:{color};font-weight:{weight};line-height:1.45"><b>Adım {n}: {name}</b><span style="font-weight:normal;margin-left:6px">— {detail}</span></span></div>')
-    st.markdown('<div style="background:#FAFAFA;border:1px solid #E0E0E0;border-radius:8px;padding:8px 6px;margin-bottom:10px">' + "".join(rows_html) + '</div>', unsafe_allow_html=True)
+    st.markdown('<div style="background:#FAFAFA;border:1px solid #E0E0E0;border-radius:8px;padding:8px 6px;margin-bottom:10px">' + "".join(rows_html) + '</div>', undamaged_allow_html=True)
 
 def bid_buttons(bids_list: list[str], cols_per_row: int = 5):
     if st.session_state["feedback"] is not None: return
