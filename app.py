@@ -119,34 +119,53 @@ def robot_bid_for_pos(pos: int, hands: list, bids: list) -> tuple[str, str]:
     # --- MINÖR AÇILIŞI SONRASI 2NT ZON GARANTİSİ KORUMASI ---
     bids_strings = [b for _, b, _ in bids]
     if len(bids_strings) >= 2:
-        # Eğer ortak (Kuzey/Robot) 2NT demişse ve siz (Güney) üstüne 3 Sinek veya 3 Karo kaçtıysanız
         if "2NT" in bids_strings and (bids_strings[-1] == "3♣" or bids_strings[-1] == "3♦"):
-            if pos == 0:  # Sıra Kuzey'e geldiğinde Pas demesin, 3NT ile zona tamamlasın!
+            if pos == 0: 
                 return "3NT", "Ortak minör rengini tekrarladı, 15+ dengeli puanla 3NT'ye tamamlıyorum."
 
-    # 1. DURUM: En son konuşan bizim ortağımızsa (YANIT MODU)
+    # --- BOT TEKLİF ÜRETİM MANTIĞI ---
+    suggested_bid, expl = BID_PASS, "Pas"
+    
     if last_real_pos == partner:
         if last_real == BID_DBL:
             doubled = _find_doubled_suit_bid(bids, partner)
-            return respond_to_double(doubled, ev)
-        s = extract_suit(last_real)
-        bid, expl = suggest_response(last_real, s, ev, 12)
-        if "tekrifi" in expl or "tıkacı" in expl or "1NT" in last_real:
-            expl = f"{last_real} konuşmasına natürel sistem yanıtı"
-        return bid, expl
+            suggested_bid, expl = respond_to_double(doubled, ev)
+        else:
+            s = extract_suit(last_real)
+            suggested_bid, expl = suggest_response(last_real, s, ev, 12)
+            if "tekrifi" in expl or "tıkacı" in expl or "1NT" in last_real:
+                expl = f"{last_real} konuşmasına natürel sistem yanıtı"
 
-    # 2. DURUM: En son rakip konuştuysa (ARAYA GİRİŞ/DEFANS MODU)
-    if our_last is None and partner_last is None: 
-        return overcall_or_double(ev, last_real)
+    elif our_last is None and partner_last is None: 
+        suggested_bid, expl = overcall_or_double(ev, last_real)
 
-    # 3. DURUM: Ortağımızın araya girişine rekabetçi destek
-    if our_last is None and partner_last is not None:
+    elif our_last is None and partner_last is not None:
         p_suit = extract_suit(partner_last)
         if p_suit and ev.length(p_suit) >= 3 and ev.hcp() >= 6:
             sym = suit_symbol(p_suit)
-            return f"2{sym}", f"Ortağın araya giriş rengine destek – 3+ {sym}"
+            suggested_bid, expl = f"2{sym}", f"Ortağın araya giriş rengine destek – 3+ {sym}"
 
-    return BID_PASS, "Pas"
+    # --- İLLEGAL DEKLERE ÖNLEME FİLTRESİ (BUG FIX) ---
+    if suggested_bid != BID_PASS and suggested_bid != BID_DBL and "RKON" not in suggested_bid:
+        try:
+            current_idx = ALL_BIDS_ORDER.index(last_real)
+            suggested_idx = ALL_BIDS_ORDER.index(suggested_bid)
+            
+            # Eğer botun üretmeye çalıştığı deklere, masadaki deklereye eşit veya altındaysa
+            if suggested_idx <= current_idx:
+                # Özel Durum: Doğu ortağının Kupa açışını desteklemek istiyor ama seviye yetmiyorsa yasal sınıra yükselt
+                if "♥" in suggested_bid and current_idx < ALL_BIDS_ORDER.index("3♥"):
+                    # Eğer el 3 seviyesine yetecek kadar güçlü bir fit desteğiyse 3'e yükselt, zayıfsa PAS geç
+                    if ev.length(Suit.HEARTS) >= 3 and ev.hcp() >= 6:
+                        suggested_bid, expl = "3♥", "Ortağın Kupa açışına rekabetçi destek (Seviye düzeltildi)"
+                    else:
+                        suggested_bid, expl = BID_PASS, "Yetersiz seviye nedeniyle Pas"
+                else:
+                    suggested_bid, expl = BID_PASS, "Yetersiz seviye nedeniyle Pas"
+        except ValueError:
+            pass
+
+    return suggested_bid, expl
 
 def correct_south_live(bids: list, hands: list) -> tuple[str, str]:
     s_ev, n_ev, seat = HandEvaluator(hands[2]), HandEvaluator(hands[0]), len(bids) + 1
@@ -154,25 +173,41 @@ def correct_south_live(bids: list, hands: list) -> tuple[str, str]:
     if last_real is None: return opening_bid(s_ev, seat=min(seat, 4))
 
     south_last = next((b for p, b, _ in reversed(bids) if p == 2 and b != BID_PASS), None)
+    bids_strings = [b for _, b, _ in bids]
 
     # En son konuşan ortağımız Kuzey (0) ise natürel sistem kuralları
     if last_real_pos == 0:
         if last_real == BID_DBL: return respond_to_double(last_real, s_ev)
+        
+        # Eğer ortak 2NT dediyse ve elimiz çok güçlü bir koz fitine sahipse sanzatuyu reddet, 4 Majör de!
+        if last_real == "2NT" and s_ev.length(Suit.SPADES) >= 5:
+            return "4♠", "Ortağın dengeli davet/GF dekleresine karşı 5'li güçlü majörümüzle koz kontratını seçiyoruz."
+            
         return suggest_response(last_real, extract_suit(last_real), s_ev, n_ev.hcp())
 
-    # En son rakipler konuştuysa araya giriş kuralları
-    if last_real_pos in (1, 3) and south_last is None:
+    # En son rakipler konuştuysa araya giriş ve rekabet kuralları
+    if last_real_pos in (1, 3):
         north_last = next((b for p, b, _ in reversed(bids) if p == 0 and b != BID_PASS), None)
-        if north_last is None: return overcall_or_double(s_ev, last_real)
+        if north_last is None: 
+            return overcall_or_double(s_ev, last_real)
+        
         n_suit = extract_suit(north_last)
+        # Ortağımızın araya girişine (Örn 3 Sinek) destek veriyorsak ve yasal sınır kurtarıyorsa
         if n_suit and s_ev.length(n_suit) >= 3 and s_ev.hcp() >= 6:
-            return f"2{suit_symbol(n_suit)}", f"Partner açılışına destek – 3+ {suit_symbol(n_suit)}"
+            sym = suit_symbol(n_suit)
+            target_bid = f"4{sym}" if s_ev.hcp() >= 10 else f"3{sym}"
+            # Eğer ortağın dekleresi zaten bizim hedefimizden yüksekse (Kuzey 3C dedi, biz 3C diyemeyiz)
+            try:
+                if ALL_BIDS_ORDER.index(target_bid) > ALL_BIDS_ORDER.index(last_real):
+                    return target_bid, f"Partnerin yarışma rengine destek – {sym}"
+            except ValueError:
+                pass
 
     # GÜNEY İÇİN GF AKTİFKEN PAS ÖNERME KORUMASI
-    bids_strings = [b for _, b, _ in bids]
     if "2NT" in bids_strings and not (last_real and (last_real.startswith("4") or "NT" in last_real)):
-        if north_suit:
-            return f"4{suit_symbol(north_suit)}", "Game Forcing (GF) aktif – Zona tamamlanmalı!"
+        n_suit = st.session_state.get("north_suit")
+        if n_suit:
+            return f"4{suit_symbol(n_suit)}", "Game Forcing (GF) aktif – Zona tamamlanmalı!"
 
     return BID_PASS, "Pas önerilir"
 
