@@ -9,27 +9,45 @@ from cards import deal_hands, Suit, SUIT_SYMBOLS, SUIT_NAMES_TR, RANK_SYMBOLS
 from evaluator import HandEvaluator
 import bidding_system as bs
 
-# FOLD 7 VE MOBİL CİHAZLAR İÇİN ADAPTİF CSS KATMANI
+# FOLD 7 GENİŞ EKRAN VE STANDART MOBİL CİHAZLAR İÇİN ÇİFT KATMANLI AKILLI CSS
 st.markdown("""
     <style>
-    html, body, [data-testid="stAppViewContainer"] { font-size: 14px !important; }
-    [data-testid="stMetricValue"] { font-size: 1.3rem !important; font-weight: bold; color: #1565C0; }
+    /* Varsayılan Masaüstü ve Geniş Tablet Düzeni */
+    html, body, [data-testid="stAppViewContainer"] { font-size: 16px !important; }
+    [data-testid="stMetricValue"] { font-size: 1.6rem !important; font-weight: bold; color: #1565C0; }
+    
     .stButton>button { 
-        width: 100%; border-radius: 6px; height: 3.2rem; 
-        font-size: 1.1rem !important; font-weight: 700;
-        margin-bottom: 5px; padding: 2px 4px;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        width: 100%; border-radius: 8px; height: 3.5rem; 
+        font-size: 1.2rem !important; font-weight: 700;
+        margin-bottom: 6px; padding: 2px 4px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.06);
     }
-    .hand-card { background: #fafafa; padding: 10px; border-radius: 8px; border: 1px solid #e2e8f0; }
-    @media (max-width: 768px) {
-        html, body, [data-testid="stAppViewContainer"] { font-size: 11px !important; }
-        .stButton>button { height: 2.9rem; font-size: 0.95rem !important; }
+    
+    .suit-symbol { font-size: 1.6rem !important; font-weight: 700; }
+    .suit-ranks { font-family: monospace; font-size: 1.4rem !important; margin-left: 8px; font-weight: bold; }
+    .hand-info-text { font-size: 1.1rem !important; font-weight: 600; color: #37474F; }
+
+    /* FOLD 7 AÇIK EKRAN (Geniş Mobil / Kare Ekranlar İçin Özel Büyütme) */
+    @media screen and (min-width: 601px) and (max-width: 1024px) {
+        html, body, [data-testid="stAppViewContainer"] { font-size: 17px !important; }
+        .stButton>button { height: 3.6rem; font-size: 1.25rem !important; }
+        .suit-symbol { font-size: 1.8rem !important; }
+        .suit-ranks { font-size: 1.6rem !important; }
+        .hand-info-text { font-size: 1.2rem !important; }
+    }
+
+    /* STANDART KÜÇÜK/DİK TELEFONLAR İÇİN DARALTMA */
+    @media screen and (max-width: 600px) {
+        html, body, [data-testid="stAppViewContainer"] { font-size: 13px !important; }
+        .stButton>button { height: 3.1rem; font-size: 1.05rem !important; }
         [data-testid="stHorizontalBlock"] { gap: 0.2rem !important; }
+        .suit-symbol { font-size: 1.4rem !important; }
+        .suit-ranks { font-size: 1.25rem !important; }
+        .hand-info-text { font-size: 0.95rem !important; }
     }
     </style>
 """, unsafe_allow_html=True)
 
-# Session State Dinamik Altyapı Enjeksiyonu
 DEFAULTS = {
     "mode": "opening", "hands": None, "feedback": None, "feedback_ok": None,
     "correct_bid": None, "north_bid": None, "north_suit": None, "trump": None,
@@ -45,13 +63,13 @@ POS_EMOJI  = ["🔵", "🟠", "🔴", "🟢"]
 POS_COLORS = ["#1565C0", "#E65100", "#B71C1C", "#2E7D32"]
 
 def render_responsive_hand(ev, title):
-    st.markdown(f"##### {title}")
+    st.markdown(f"#### {title}")
     for suit in reversed(list(Suit)):
         cards = ev.suit_cards(suit)
         color = "#c62828" if suit in (Suit.HEARTS, Suit.DIAMONDS) else "#1a1a1a"
         ranks = " ".join(RANK_SYMBOLS[c.rank] for c in sorted(cards, key=lambda c: c.rank, reverse=True)) if cards else "—"
-        st.markdown(f"<span style='font-size:1.25rem; color:{color}; font-weight:700'>{SUIT_SYMBOLS[suit]}</span> <span style='font-family:monospace; font-size:1.15rem; margin-left:6px'>{ranks}</span>", unsafe_allow_html=True)
-    st.markdown(f"`HKP: {ev.hcp()} | Dağılım puanı: +{ev.distribution_points()} | Toplam: {ev.total_points()} TP`")
+        st.markdown(f"<span class='suit-symbol' style='color:{color};'>{SUIT_SYMBOLS[suit]}</span><span class='suit-ranks'>{ranks}</span>", unsafe_allow_html=True)
+    st.markdown(f"<div class='hand-info-text'>HKP: <b>{ev.hcp()}</b> | Dağılım: <b>+{ev.distribution_points()}</b> | Toplam: <b>{ev.total_points()} TP</b></div>", unsafe_allow_html=True)
 
 def extract_suit(bid: str) -> Suit | None:
     mapping = {"♠": Suit.SPADES, "♥": Suit.HEARTS, "♦": Suit.DIAMONDS, "♣": Suit.CLUBS}
@@ -76,7 +94,6 @@ def robot_bid_for_pos(pos: int, hands: list, bids: list) -> tuple[str, str]:
     ev, partner, seat = HandEvaluator(hands[pos]), (pos + 2) % 4, len(bids) + 1
     last_real, last_real_pos = last_real_bid_and_pos(bids)
     if last_real is None: return bs.opening_bid(ev, seat=min(seat, 4))
-    
     if last_real_pos == partner:
         if last_real == bs.BID_DBL: return bs.respond_to_double(last_real, ev)
         return bs.suggest_response(last_real, extract_suit(last_real), ev, 12)
@@ -143,7 +160,6 @@ def submit_bid(user_bid: str):
             correct, explanation = bs.rkcb_response(s_ev, st.session_state["trump"] or Suit.SPADES)
         else:
             correct, explanation = bs.suggest_response(st.session_state["north_bid"], extract_suit(st.session_state["north_bid"]), s_ev, n_ev.hcp())
-            # Şlem Sınırı ve RKCB Tetikleme Kontrolü
             if user_bid == "4NT" and correct == "4NT":
                 st.session_state["rkcb_active"] = True
                 st.session_state["trump"] = extract_suit(st.session_state["north_bid"]) or Suit.SPADES
@@ -154,9 +170,6 @@ def submit_bid(user_bid: str):
     st.session_state["score"]["total"] += 1
     if ok: st.session_state["score"]["correct"] += 1
 
-# ───────────────────────────────────────────────
-# 3'LÜ RAFİNE PROFESYONEL MENÜ TASARIMI
-# ───────────────────────────────────────────────
 with st.sidebar:
     st.title("🃏 TBF Briç Akademi")
     st.caption("Resmi 5'li Majör & Standart Sistem")
@@ -180,7 +193,6 @@ with st.sidebar:
     pct = int(corrects / totals * 100) if totals else 0
     st.metric("Performans (Doğru/Toplam)", f"{corrects} / {totals}", f"Başarı: {pct}%")
 
-# Dinamik Başlık Blokları
 mode = st.session_state["mode"]
 if st.session_state["hands"] is None:
     deal_new_hand()
@@ -204,8 +216,10 @@ if mode == "live":
             st.markdown(f"{POS_EMOJI[p]} **{POS_NAMES[p]}**: `{b}` — <span style='font-size:0.85rem;color:#555'>{e}</span>", unsafe_allow_html=True)
             
     if st.session_state["live_feedback"]:
-        if st.session_state["live_feedback_ok"]: st.success(f"✅ Kusursuz Hamle! {st.session_state['live_feedback']}")
-        else: st.error(f"❌ TBF Önerisi: {st.session_state['live_feedback_correct']} | {st.session_state['live_feedback']}")
+        if st.session_state["live_feedback_ok"]: 
+            st.success(f"✅ Kusursuz Hamle! Şunu demeniz önerilirdi: {st.session_state['live_feedback']}")
+        else: 
+            st.error(f"❌ TBF Önerisi: {st.session_state['live_feedback_correct']} | Şunu demeniz önerilirdi: {st.session_state['live_feedback']}")
         
     if not live_done:
         st.markdown("---")
@@ -242,10 +256,11 @@ with sc2:
 st.divider()
 
 if st.session_state["feedback"] is not None:
-    if st.session_state["feedback_ok"]: st.success(f"✅ Doğru Deklere: {st.session_state['correct_bid']}")
-    else: st.error(f"❌ Yanlış Tercih. TBF Kuralı Sistem Önerisi: {st.session_state['correct_bid']}")
-    st.markdown(f"> **Gerekçe:** {st.session_state['feedback']}")
-    if st.button("Sonraki Ele İlerle ➡️", type="primary", use_container_width=True):
+    if st.session_state["feedback_ok"]: 
+        st.success(f"✅ Doğru Deklere: {st.session_state['correct_bid']} | Şunu demeniz önerilirdi: {st.session_state['feedback']}")
+    else: 
+        st.error(f"❌ Yanlış Tercih. TBF Kuralı Sistem Önerisi: {st.session_state['correct_bid']} | Şunu demeniz önerilirdi: {st.session_state['feedback']}")
+    if st.button("Sonraki El için Tıklayın ➡️", type="primary", use_container_width=True):
         deal_new_hand()
         st.rerun()
 else:
