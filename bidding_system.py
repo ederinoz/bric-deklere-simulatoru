@@ -83,14 +83,24 @@ def response_to_major(opener_suit: Suit, ev: HandEvaluator, partner_hcp: int) ->
     if supp >= 3 and 6 <= hcp <= 9: return f"2{sym}", f"Basit artış – 3+ destek, 6-9 HKP"
     if supp >= 5 and hcp < 10: return f"4{sym}", f"Kapatma artışı – 5+ destek, <10 HKP"
 
-    # Yeni renk okuma önceliği (1 seviyesinde majör varsa önce o)
+    # --- KRİTİK DÜZELTME: GÜÇLÜ ELLERDE ÖNCE 2 SEVİYESİNDE YENİ RENK ---
+    # Eğer el 10+ HKP ise ve uzun bir minör/diğer renk varsa, 4'lü majörden önce o okunur (GF/Zorlayıcı davet)
+    if hcp >= 10:
+        for s in [Suit.CLUBS, Suit.DIAMONDS, Suit.HEARTS, Suit.SPADES]:
+            if s != opener_suit and ev.length(s) >= 4:
+                # Eğer aranan renk açış renginden büyükse 1 seviyesinde, küçükse 2 seviyesinde zorlayıcı okunur
+                if _bid_rank(f"2{suit_symbol(s)}") > _bid_rank(f"1{sym}"):
+                    # Elimizde 5+ veya 6+ başka bir uzun renk varsa ve el güçlüyse öncelik onundur
+                    if ev.length(s) >= 5:
+                        return f"2{suit_symbol(s)}", f"Güçlü el ile uzun yeni renk zorlayıcı ({suit_symbol(s)}, 10+ HKP)"
+
+    # Eğer el güçlü değilse veya uzun bir minör yoksa klasik 4'lü Maça yanıtı verilir
     if opener_suit == Suit.HEARTS and ev.length(Suit.SPADES) >= 4 and hcp >= 6:
         return "1♠", "1♥ açışına 4+ Maça yanıtı (6+ HKP)"
 
     if hcp >= 10:
         for s in [Suit.CLUBS, Suit.DIAMONDS, Suit.HEARTS, Suit.SPADES]:
             if s != opener_suit and ev.length(s) >= 4:
-                # 2 seviyesinde yeni renk okuma zorlaması
                 if _bid_rank(f"2{suit_symbol(s)}") > _bid_rank(f"1{sym}"):
                     return f"2{suit_symbol(s)}", f"Yeni renk 2 seviyesinde zorlayıcı ({suit_symbol(s)}, 10+ HKP)"
 
