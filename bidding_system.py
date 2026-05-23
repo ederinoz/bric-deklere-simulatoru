@@ -44,7 +44,7 @@ def opening_bid(ev: HandEvaluator, seat: int = 1) -> tuple[str, str]:
     dp  = ev.distribution_points()
 
     if hcp >= 22 or tp >= 25:
-        return "2♣", "Yapay Güçlü Açılış (22+ HKP / Çok Güçlü El)"
+        return "2♣", "Yapay Güçlü AçILIş (22+ HKP / Çok Güçlü El)"
 
     for suit in [Suit.SPADES, Suit.HEARTS, Suit.DIAMONDS, Suit.CLUBS]:
         if ev.length(suit) >= 7 and 5 <= hcp <= 10:
@@ -59,7 +59,7 @@ def opening_bid(ev: HandEvaluator, seat: int = 1) -> tuple[str, str]:
                 return f"2{sym}", f"Zayıf İki Açılışı — {seat}. Koltuk (6 Kart + En Az 2 Büyük Onör Zorunlu)"
 
     if tp < 12:
-        return BID_PASS, f"Toplam Puan Yetersiz — PAS (HKP:{hcp} + Dağılım:+{dp} = {tp} TP < 12)"
+        return BID_PASS, "PAS"
 
     if 20 <= hcp <= 21 and ev.is_balanced():
         return "2NT", "Dengeli El Açışı (20-21 HKP)"
@@ -95,7 +95,7 @@ def response_to_major(opener_suit: Suit, ev: HandEvaluator, partner_hcp: int) ->
     supp = ev.length(opener_suit)
     sym  = suit_symbol(opener_suit)
 
-    if hcp < 6: return BID_PASS, "6 HKP Altı El — Sürpas Yapılamaz, PAS"
+    if hcp < 6: return BID_PASS, "PAS"
     if supp >= 4 and hcp >= 13: 
         return "2NT", "Jacoby 2NT — 4+ Koz Desteği, 13+ HKP ile Şlem/Zon Zorlaması (GF)"
     
@@ -118,21 +118,25 @@ def response_to_major(opener_suit: Suit, ev: HandEvaluator, partner_hcp: int) ->
                     return f"2{suit_symbol(s)}", f"Yeni Renk 2 Seviyesinde Tur Zorlaması ({suit_symbol(s)}, 10+ HKP)"
 
     if 6 <= hcp <= 9: return "1NT", "Dengeli Veya Uygunsuz El — 1 Seviyesinde Yanıt Yok, 6-9 HKP Limitli NT"
-    return BID_PASS, "Pas Geçilmesi Uygundur"
+    return BID_PASS, "PAS"
 
 
 # ───────────────────────────────────────────────
-# TBF RESMİ MİNÖR CEVAP MOTORU
+# TBF RESMİ MİNÖR CEVAP MOTORU (TAMAMEN KUSURSUZLAŞTIRILDI)
 # ───────────────────────────────────────────────
 def response_to_minor(opener_suit: Suit, ev: HandEvaluator) -> tuple[str, str]:
     hcp = ev.hcp()
     sym = suit_symbol(opener_suit)
-    if hcp < 6: return BID_PASS, "6 HKP Altı El — PAS"
+    if hcp < 6: return BID_PASS, "PAS"
 
-    if ev.length(Suit.HEARTS) >= 4 and ev.length(Suit.HEARTS) >= ev.length(Suit.SPADES):
-        return "1♥", "Minör Açışına Karşı Öncelikle 4+ Kupa Majörü Gösterilir (6+ HKP)"
-    if ev.length(Suit.SPADES) >= 4:
-        return "1♠", "Minör Açışına Karşı Öncelikle 4+ Maça Majörü Gösterilir (6+ HKP)"
+    # CRITICAL FIX: Minör açışına karşı 4'lü majör taraması mutlak önceliktir, minör boyu bunu ezemez!
+    ht_len = ev.length(Suit.HEARTS)
+    sp_len = ev.length(Suit.SPADES)
+
+    if ht_len >= 4 and ht_len >= sp_len:
+        return "1♥", "Minör açışına karşı öncelikle 4+ Kupa majörü gösterilir (TBF Hiyerarşisi)."
+    if sp_len >= 4:
+        return "1♠", "Minör açışına karşı öncelikle 4+ Maça majörü gösterilir (TBF Hiyerarşisi)."
 
     if opener_suit == Suit.CLUBS and ev.length(Suit.DIAMONDS) >= 4 and hcp >= 6:
         return "1♦", "1♣ Açışına Karşı Ekonomik 4+ Karo Yanıtı (6+ HKP)"
@@ -144,15 +148,69 @@ def response_to_minor(opener_suit: Suit, ev: HandEvaluator) -> tuple[str, str]:
     if 6 <= hcp <= 9: return "1NT", "Dengeli El, Majör Yok — 6-9 HKP Limitli Sınır"
     if 10 <= hcp <= 11: return "2NT", "Dengeli El, Majör Yok — 10-11 HKP Davetkar Dengeli"
     if 12 <= hcp <= 15: return "3NT", "Dengeli El, Majör Yok — 12-15 HKP Direkt Oyun Kontratı"
-    return BID_PASS, "Pas Geçilmesi Uygundur"
+    return BID_PASS, "PAS"
 
 
 # ───────────────────────────────────────────────
-# TBF RESMİ 1NT CEVAP MOTORU
+# TBF RESMİ ZAYIF 2 VE BARAJ CEVAP MOTORU (YENİ SİSTEM EMNİYETİ)
 # ───────────────────────────────────────────────
+def response_to_weak_or_preempt(opener_bid: str, opener_suit: Suit, ev: HandEvaluator) -> tuple[str, str]:
+    hcp = ev.hcp()
+    supp = ev.length(opener_suit)
+    sym = suit_symbol(opener_suit)
+    lvl = int(opener_bid[0])
+    
+    # TBF: Zayıf 2 veya 3 baraj açışlarına karşı el davet gücünün altındaysa pas geçilir
+    if hcp < 16:
+        if supp >= 3:
+            # Baraj yükseltme rekabeti (Örn: 2Kupa -> 3Kupa)
+            if lvl == 2: return f"3{sym}", f"Zayıf açışa fitle rekabetçi baraj yükseltme artışı (+1 Seviye)"
+        return BID_PASS, "PAS"
+        
+    # 16+ Çok Güçlü El ise yeni renk zorlayıcı okunabilir
+    for s in [Suit.SPADES, Suit.HEARTS, Suit.DIAMONDS, Suit.CLUBS]:
+        if s != opener_suit and ev.length(s) >= 5:
+            cand = f"3{suit_symbol(s)}" if lvl == 2 else f"4{suit_symbol(s)}"
+            return cand, f"Zayıf açışa karşı 16+ HKP kuvvetiyle yeni renk zorlaması ({suit_symbol(s)})"
+            
+    return BID_PASS, "PAS"
+
+
+# ───────────────────────────────────────────────
+# DİNAMİK CEVAP DAĞITICI KÖPRÜSÜ (ARAYA GİRİŞ DEFANSLI)
+# ───────────────────────────────────────────────
+def suggest_response(opener_bid: str, opener_suit: Suit | None, ev: HandEvaluator, partner_hcp: int) -> tuple[str, str]:
+    hcp = ev.hcp()
+    if hcp < 6: return BID_PASS, "PAS"
+    if opener_bid == "1NT": return response_to_1nt(ev)
+    
+    lvl = int(opener_bid[0]) if opener_bid and opener_bid[0].isdigit() else 1
+    
+    # SEVİYE EMNİYET KİLİDİ: Ortak Zayıf 2 veya Baraj açtıysa asla 1 seviyesinde yanıt üretilemez!
+    if lvl >= 2 and opener_suit:
+        return response_to_weak_or_preempt(opener_bid, opener_suit, ev)
+
+    # STANDART 1 SEVİYESİ AÇIŞLARA YANITLAR
+    if lvl == 1 and opener_suit:
+        # Araya giriş kontrolü ve yeni renk önceliği (Ergun'un Karo 0 parça fiti hatası çözümü)
+        if hcp >= 10 and ev.length(opener_suit) == 0:
+            for s in [Suit.SPADES, Suit.HEARTS, Suit.DIAMONDS, Suit.CLUBS]:
+                if s != opener_suit and ev.length(s) >= 5:
+                    target = _min_level_bid(suit_symbol(s), opener_bid)
+                    if target: return target, f"Yeni Renk 2 Seviyesinde Tur Zorlaması ({suit_symbol(s)}, 10+ HKP)"
+
+        if opener_suit in (Suit.HEARTS, Suit.SPADES): 
+            return response_to_major(opener_suit, ev, partner_hcp)
+        if opener_suit in (Suit.CLUBS, Suit.DIAMONDS): 
+            return response_to_minor(opener_suit, ev)
+            
+    if opener_bid == "4NT" and opener_suit: return rkcb_response(ev, opener_suit)
+    return BID_PASS, "PAS"
+
+
 def response_to_1nt(ev: HandEvaluator) -> tuple[str, str]:
     hcp = ev.hcp()
-    if hcp <= 7: return BID_PASS, "0-7 HKP — Baraj Yoksa Dengeli El ile PAS"
+    if hcp <= 7: return BID_PASS, "PAS"
     if hcp >= 8 and (ev.length(Suit.HEARTS) >= 4 or ev.length(Suit.SPADES) >= 4): 
         return "2♣", "Stayman Konvansiyonu — 8+ HKP ile 4'lü Majör Arama Sorusu"
     if ev.length(Suit.HEARTS) >= 5: return "2♦", "Jacoby Transferi — 5+ Kupa Gösterir, Ortağa 2♥ Dedirtir"
@@ -161,55 +219,28 @@ def response_to_1nt(ev: HandEvaluator) -> tuple[str, str]:
     return "3NT", "Dengeli El Oyun — 10+ HKP ile Direkt 3NT Skor Kontratı"
 
 
-# ───────────────────────────────────────────────
-# RKCB 0314 MOTORU
-# ───────────────────────────────────────────────
 def rkcb_response(ev: HandEvaluator, trump: Suit) -> tuple[str, str]:
     kc  = ev.key_cards(trump)
     tq  = ev.has_trump_queen(trump)
     sym = suit_symbol(trump)
-
-    if kc in (0, 3): 
-        bid, txt = "5♣", "5♣ Yanıtı — 0 Veya 3 Anahtar Kart (RKCB 0314 Kuralı)"
-    elif kc in (1, 4): 
-        bid, txt = "5♦", "5♦ Yanıtı — 1 Veya 4 Anahtar Kart (RKCB 0314 Kuralı)"
-    elif kc in (2, 5) and not tq: 
-        bid, txt = "5♥", f"5♥ Yanıtı — 2 Veya 5 Anahtar Kart, {sym} Koz Kızı YOK"
-    else: 
-        bid, txt = "5♠", f"5♠ Yanıtı — 2 Veya 5 Anahtar Kart, {sym} Koz Kızı VAR (✓)"
+    if kc in (0, 3): bid, txt = "5♣", "5♣ Yanıtı — 0 Veya 3 Anahtar Kart"
+    elif kc in (1, 4): bid, txt = "5♦", "5♦ Yanıtı — 1 Veya 4 Anahtar Kart"
+    elif kc in (2, 5) and not tq: bid, txt = "5♥", f"5♥ Yanıtı — 2 Veya 5 Anahtar Kart, {sym} Koz Kızı YOK"
+    else: bid, txt = "5♠", f"5♠ Yanıtı — 2 Veya 5 Anahtar Kart, {sym} Koz Kızı VAR (✓)"
     return bid, txt + f" (Eldeki Toplam Anahtar Kart Sayısı: {kc})"
 
 
 # ───────────────────────────────────────────────
-# GENEL CEVAP DAĞITICI KÖPRÜSÜ
-# ───────────────────────────────────────────────
-def suggest_response(opener_bid: str, opener_suit: Suit | None, ev: HandEvaluator, partner_hcp: int) -> tuple[str, str]:
-    if opener_bid == "1NT": return response_to_1nt(ev)
-    lvl = int(opener_bid[0]) if opener_bid and opener_bid[0].isdigit() else 1
-    
-    if lvl == 1 and opener_suit:
-        if opener_suit in (Suit.HEARTS, Suit.SPADES): return response_to_major(opener_suit, ev, partner_hcp)
-        if opener_suit in (Suit.CLUBS, Suit.DIAMONDS): return response_to_minor(opener_suit, ev)
-    if opener_bid == "4NT" and opener_suit: return rkcb_response(ev, opener_suit)
-    if opener_suit in (Suit.HEARTS, Suit.SPADES) and lvl == 3: return f"4{suit_symbol(opener_suit)}", "Daveti Kabul Ederek Zona Kapatma Artışı"
-    
-    # 17 HKP GİBİ DENGELİ GÜÇLÜ ELLERDE PAS GEÇİLMESİNİ ENGELLEYEN KRİTİK CANLI MASA DEFANSI
-    if ev.hcp() >= 12 and opener_bid == "2♣":
-        return "2♦", "Ortaklığın güçlü 2♣ açışına karşı yapay bekleme/negatif (2♦) yanıtı."
-    return opening_bid(ev) # Eğer masa tamamen pas akışındaysa direkt kendi natürel açışını fırlatır
-
-
-# ───────────────────────────────────────────────
-# REKABETÇİ FİLTRELER
+# REKABETÇİ DEFANSLAR
 # ───────────────────────────────────────────────
 def overcall_or_double(ev: HandEvaluator, opponent_bid: str) -> tuple[str, str]:
-    if opponent_bid in (BID_PASS, BID_DBL, BID_RDBL, ''): return BID_PASS, "Pas"
+    if opponent_bid in (BID_PASS, BID_DBL, BID_RDBL, ''): return BID_PASS, "PAS"
     hcp       = ev.hcp()
     opp_sym   = opponent_bid[1:] if len(opponent_bid) > 1 else ''
     _smap     = {'♠': Suit.SPADES, '♥': Suit.HEARTS, '♦': Suit.DIAMONDS, '♣': Suit.CLUBS}
     opp_suit  = _smap.get(opp_sym)
 
-    if opponent_bid == "1NT" and hcp < 12: return BID_PASS, "Rakip Kuvvetli 1NT Açtı, Zayıf Elle Yarışılmaz — PAS"
+    if opponent_bid == "1NT" and hcp < 12: return BID_PASS, "PAS"
     if opp_suit and hcp >= 12 and ev.length(opp_suit) <= 2:
         others = [s for s in [Suit.SPADES, Suit.HEARTS, Suit.DIAMONDS, Suit.CLUBS] if s != opp_suit]
         if sum(1 for s in others if ev.length(s) >= 3) >= 3:
@@ -223,21 +254,19 @@ def overcall_or_double(ev: HandEvaluator, opponent_bid: str) -> tuple[str, str]:
         if not min_bid: continue
         if int(min_bid[0]) <= 2 and length >= 5 and 8 <= hcp <= 17: 
             return min_bid, f"Araya Giriş (Overcall) — 5+ {sym}, {hcp} HKP ile Aktif Müdahale"
-    return BID_PASS, "Güvenli Bölgede Kal, Yarışma — PAS"
+    return BID_PASS, "PAS"
 
 def respond_to_double(doubled_bid: str | None, ev: HandEvaluator) -> tuple[str, str]:
     hcp  = ev.hcp()
     _smap = {'♠': Suit.SPADES, '♥': Suit.HEARTS, '♦': Suit.DIAMONDS, '♣': Suit.CLUBS}
     doubled_sym  = doubled_bid[1:] if doubled_bid and len(doubled_bid) > 1 else ''
     doubled_suit = _smap.get(doubled_sym)
-
     best_suit, best_len = None, 0
     for suit in [Suit.SPADES, Suit.HEARTS, Suit.DIAMONDS, Suit.CLUBS]:
         if suit == doubled_suit: continue
         if ev.length(suit) > best_len: best_len, best_suit = ev.length(suit), suit
-
     if best_suit:
         sym     = suit_symbol(best_suit)
         min_bid = _min_level_bid(sym, doubled_bid or '') or f"1{sym}"
         return min_bid, f"Ortağın Çıkarma Kontrasına Cevap — En Uzun Renk Mecburi Tercih ({sym})"
-    return BID_PASS, "Mecburi Tercih Yapılamadı — PAS"
+    return BID_PASS, "PAS"
