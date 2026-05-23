@@ -202,7 +202,7 @@ def overcall_or_double(ev: HandEvaluator, opponent_bid: str, partner_passed: boo
 def competitive_fallback(ev: HandEvaluator, last_bid: str, my_previous_bid: str | None, partner_passed_twice: bool = False) -> tuple[str, str]:
     """
     ERGUN FİLTRESİ 2: Kullanıcı 4'lü majörle araya girdikten sonra ortak pas geçmeye devam ederse,
-    elde ekstra şlem/zon kuvveti (16+ HKP) yoksa tek başına majör tekrarı yapmasını engeller, PAS geçirir.
+    elde ekstra kuvvet (16+ HKP) yoksa tek başına majör tekrarı yapılmasını engeller, PAS geçirir.
     """
     hcp = ev.hcp()
     if my_previous_bid and len(my_previous_bid) > 1:
