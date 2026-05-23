@@ -127,6 +127,16 @@ def robot_bid_for_pos(pos: int, hands: list, bids: list) -> tuple[str, str]:
     our_last     = next((b for p, b, _ in reversed(bids) if p == pos     and b != BID_PASS), None)
     partner_last = next((b for p, b, _ in reversed(bids) if p == partner and b != BID_PASS), None)
 
+    # --- KRİTİK BUG FIX: GÜÇLÜ 2♣ AÇILIŞINA PAS GEÇİLMESİNİ ENGELLEME ---
+    if last_real == "2♣" and last_real_pos == partner:
+        # Ortak güçlü 2♣ açtıysa ASLA pas geçilemez (Game Forcing / Zon Zorlaması)
+        if ev.hcp() >= 8:
+            # 8+ puanı ve güzel bir majörü varsa onu okusun
+            if ev.length(Suit.SPADES) >= 5: return "2♠", "Ortaklığın güçlü 2♣ açışına karşı 5+ Maça ve 8+ HKP yanıtı."
+            if ev.length(Suit.HEARTS) >= 5: return "2♥", "Ortaklığın güçlü 2♣ açışına karşı 5+ Kupa ve 8+ HKP yanıtı."
+        # Puanı zayıfsa veya net bir rengi yoksa negatif/bekleme dekleresi olan 2♦ vermelidir
+        return "2♦", "Ortaklığın güçlü 2♣ açışına karşı yapay bekleme/negatif (2♦) yanıtı."
+
     # --- MINÖR AÇILIŞI SONRASI 2NT ZON GARANTİSİ KORUMASI ---
     bids_strings = [b for _, b, _ in bids]
     if len(bids_strings) >= 2:
@@ -156,7 +166,7 @@ def robot_bid_for_pos(pos: int, hands: list, bids: list) -> tuple[str, str]:
             sym = suit_symbol(p_suit)
             suggested_bid, expl = f"2{sym}", f"Ortağın araya giriş rengine destek – 3+ {sym}"
 
-    # --- İLLEGAL DEKLERE ÖNLEME FİLTRESİ (BUG FIX) ---
+    # --- İLLEGAL DEKLERE ÖNLEME FİLTRESİ ---
     if suggested_bid != BID_PASS and suggested_bid != BID_DBL and "RKON" not in suggested_bid:
         try:
             current_idx = ALL_BIDS_ORDER.index(last_real)
@@ -174,7 +184,6 @@ def robot_bid_for_pos(pos: int, hands: list, bids: list) -> tuple[str, str]:
             pass
 
     return suggested_bid, expl
-
 def correct_south_live(bids: list, hands: list) -> tuple[str, str]:
     s_ev, n_ev, seat = HandEvaluator(hands[2]), HandEvaluator(hands[0]), len(bids) + 1
     last_real, last_real_pos = last_real_bid_and_pos(bids)
