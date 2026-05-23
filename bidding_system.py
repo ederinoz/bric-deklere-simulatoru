@@ -32,7 +32,6 @@ def _min_level_bid(suit_sym: str, over_bid: str) -> str | None:
 def opening_bid(ev: HandEvaluator, seat: int = 1) -> tuple[str, str]:
     hcp = ev.hcp()
     tp  = ev.total_points()
-    dp  = ev.distribution_points()
 
     if hcp >= 22 or tp >= 25:
         return "2♣", "Yapay Güçlü Açılış (22+ HKP / Çok Güçlü El)"
@@ -45,7 +44,7 @@ def opening_bid(ev: HandEvaluator, seat: int = 1) -> tuple[str, str]:
         if ev.length(suit) == 6 and 6 <= hcp <= 10:
             sym = suit_symbol(suit)
             if seat == 3:
-                return f"2{sym}", f"Zayıf İki Açılışı — 3. Koltuk (6 Kart, Ortak Pas Geçtiği İçin Kalite Aranmaz)"
+                return f"2{sym}", f"Zayıf İki Açılışı — 3. Koltuk (Ortak Pas Geçtiği İçin Kalite Aranmaz)"
             elif has_two_honors(ev, suit):
                 return f"2{sym}", f"Zayıf İki Açılışı — {seat}. Koltuk (6 Kart + En Az 2 Büyük Onör Zorunlu)"
 
@@ -76,7 +75,7 @@ def response_to_major(opener_suit: Suit, ev: HandEvaluator) -> tuple[str, str]:
     
     if hcp >= 12 and supp < 4:
         for s in [Suit.CLUBS, Suit.DIAMONDS]:
-            if ev.length(s) >= 5: return f"2{suit_symbol(s)}", f"GF Kuvvetli El ile Uzun Yeni Minör Önceliği Zorlayıcı ({suit_symbol(s)}, 12+ HKP)"
+            if ev.length(s) >= 5: return f"2{suit_symbol(s)}", f"GF Kuvvetli El ile Uzun Yeni Minör Önceliği ({suit_symbol(s)}, 12+ HKP)"
 
     if supp >= 3 and 10 <= hcp <= 12: return f"3{sym}", f"Limitli Davet Artışı — 3+ Desteğe Karşı 10-12 HKP"
     if supp >= 3 and 6 <= hcp <= 9: return f"2{sym}", f"Basit Yapıcı Artış — 3+ Desteğe Karşı 6-9 HKP"
@@ -91,7 +90,7 @@ def response_to_major(opener_suit: Suit, ev: HandEvaluator) -> tuple[str, str]:
                 cand = f"2{suit_symbol(s)}"
                 if _bid_rank(cand) > _bid_rank(f"1{sym}"): return cand, f"Yeni Renk 2 Seviyesinde Tur Zorlaması ({suit_symbol(s)}, 10+ HKP)"
 
-    if 6 <= hcp <= 9: return "1NT", "Dengeli Veya Uygunsuz El — 1 Seviyesinde Yanıt Yok, 6-9 HKP Limitli NT"
+    if 6 <= hcp <= 9: return "1NT", "Dengeli Veya Uygunsuz El — 6-9 HKP Limitli NT"
     return BID_PASS, "PAS"
 
 def response_to_minor(opener_suit: Suit, ev: HandEvaluator) -> tuple[str, str]:
@@ -171,7 +170,7 @@ def suggest_response(opener_bid: str, opener_suit: Suit | None, ev: HandEvaluato
     if opener_bid == "4NT" and opener_suit: return rkcb_response(ev, opener_suit)
     return BID_PASS, "PAS"
 
-def overcall_or_double(ev: HandEvaluator, opponent_bid: str) -> tuple[str, str]:
+def overcall_or_double(ev: HandEvaluator, opponent_bid: str, partner_passed: bool = False) -> tuple[str, str]:
     if opponent_bid in (BID_PASS, BID_DBL, BID_RDBL, ''): return BID_PASS, "PAS"
     hcp       = ev.hcp()
     opp_sym   = opponent_bid[1:] if len(opponent_bid) > 1 else ''
@@ -179,6 +178,7 @@ def overcall_or_double(ev: HandEvaluator, opponent_bid: str) -> tuple[str, str]:
     opp_suit  = _smap.get(opp_sym)
 
     if opponent_bid == "1NT" and hcp < 12: return BID_PASS, "PAS"
+    
     if opp_suit and hcp >= 12 and ev.length(opp_suit) <= 2:
         others = [s for s in [Suit.SPADES, Suit.HEARTS, Suit.DIAMONDS, Suit.CLUBS] if s != opp_suit]
         if sum(1 for s in others if ev.length(s) >= 3) >= 3:
@@ -189,9 +189,30 @@ def overcall_or_double(ev: HandEvaluator, opponent_bid: str) -> tuple[str, str]:
         length  = ev.length(suit)
         sym     = suit_symbol(suit)
         min_bid = _min_level_bid(sym, opponent_bid)
-        if min_bid and int(min_bid[0]) <= 2 and length >= 5 and 8 <= hcp <= 17:
-            return min_bid, f"Araya Giriş (Overcall) — 5+ {sym}, {hcp} HKP"
+        if min_bid:
+            lvl = int(min_bid[0])
+            # ERGUN FİLTRESİ 1: Ortak pas geçmişken 2 seviyesinde riskli araya girmeyi engelle (Min 11 HKP şartı)
+            if partner_passed and lvl >= 2 and hcp < 11:
+                continue
+            if lvl <= 2 and length >= 5 and 8 <= hcp <= 17:
+                return min_bid, f"Araya Giriş (Overcall) — 5+ {sym}, {hcp} HKP"
+                
     return BID_PASS, "PAS"
+
+def competitive_fallback(ev: HandEvaluator, last_bid: str, my_previous_bid: str | None, partner_passed_twice: bool = False) -> tuple[str, str]:
+    """
+    ERGUN FİLTRESİ 2: Kullanıcı 4'lü majörle araya girdikten sonra ortak pas geçmeye devam ederse,
+    elde ekstra şlem/zon kuvveti (16+ HKP) yoksa tek başına majör tekrarı yapmasını engeller, PAS geçirir.
+    """
+    hcp = ev.hcp()
+    if my_previous_bid and len(my_previous_bid) > 1:
+        my_suit_sym = my_previous_bid[1:]
+        _smap = {'♠': Suit.SPADES, '♥': Suit.HEARTS, '♦': Suit.DIAMONDS, '♣': Suit.CLUBS}
+        my_suit = _smap.get(my_suit_sym)
+        if my_suit and ev.length(my_suit) == 4 and partner_passed_twice and hcp < 16:
+            return BID_PASS, "Ortak pas geçmeye devam ediyor ve majörünüz 4 parça limitli. Yarışmadan çekilip PAS geçilmesi uygundur."
+            
+    return overcall_or_double(ev, last_bid, partner_passed=True)
 
 def respond_to_double(doubled_bid: str | None, ev: HandEvaluator) -> tuple[str, str]:
     _smap = {'♠': Suit.SPADES, '♥': Suit.HEARTS, '♦': Suit.DIAMONDS, '♣': Suit.CLUBS}
