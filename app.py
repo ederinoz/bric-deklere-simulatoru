@@ -9,41 +9,48 @@ from cards import deal_hands, Suit, SUIT_SYMBOLS, SUIT_NAMES_TR, RANK_SYMBOLS
 from evaluator import HandEvaluator
 import bidding_system as bs
 
-# FOLD 7 GENİŞ EKRAN VE STANDART MOBİL CİHAZLAR İÇİN ÇİFT KATMANLI AKILLI CSS
+# FOLD 7 GENİŞ/SIKI DÜZEN VE TÜM TELEFONLAR İÇİN OPTİMİZE ENJEKSİYON CSS
 st.markdown("""
     <style>
-    /* Varsayılan Masaüstü ve Geniş Tablet Düzeni */
-    html, body, [data-testid="stAppViewContainer"] { font-size: 16px !important; }
-    [data-testid="stMetricValue"] { font-size: 1.6rem !important; font-weight: bold; color: #1565C0; }
+    html, body, [data-testid="stAppViewContainer"] { font-size: 15px !important; }
+    [data-testid="stMetricValue"] { font-size: 1.4rem !important; font-weight: bold; color: #1565C0; }
+    
+    /* ÇOHA YEŞİLİ BAŞLIK VE KOMPAKT BLOK DÜZENİ */
+    .table-title { color: #2e7d32 !important; font-size: 1.4rem !important; font-weight: 800; margin-bottom: 8px; }
     
     .stButton>button { 
-        width: 100%; border-radius: 8px; height: 3.5rem; 
+        width: 100%; border-radius: 6px; height: 3.3rem; 
         font-size: 1.2rem !important; font-weight: 700;
-        margin-bottom: 6px; padding: 2px 4px;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+        margin-bottom: 2px !important; padding: 2px 4px;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.05);
     }
     
-    .suit-symbol { font-size: 1.6rem !important; font-weight: 700; }
-    .suit-ranks { font-family: monospace; font-size: 1.4rem !important; margin-left: 8px; font-weight: bold; }
-    .hand-info-text { font-size: 1.1rem !important; font-weight: 600; color: #37474F; }
+    .suit-symbol { font-size: 1.7rem !important; font-weight: 700; vertical-align: middle; }
+    .suit-ranks { font-family: monospace; font-size: 1.45rem !important; margin-left: 10px; font-weight: bold; vertical-align: middle; }
+    .hand-info-text { font-size: 1.15rem !important; font-weight: 600; color: #37474F; margin-top: 4px; }
 
-    /* FOLD 7 AÇIK EKRAN (Geniş Mobil / Kare Ekranlar İçin Özel Büyütme) */
+    /* RENK KODLAMASI: AKIŞ PANELİNDEKİ DEKLERELER */
+    .bid-red { color: #c62828 !important; font-weight: bold; font-size: 1.15rem; }
+    .bid-black { color: #1a1a1a !important; font-weight: bold; font-size: 1.15rem; }
+
+    /* FOLD 7 AÇIK (GENİŞ KARE) SIKIŞTIRMA VE KENETLEME */
     @media screen and (min-width: 601px) and (max-width: 1024px) {
-        html, body, [data-testid="stAppViewContainer"] { font-size: 17px !important; }
-        .stButton>button { height: 3.6rem; font-size: 1.25rem !important; }
+        html, body, [data-testid="stAppViewContainer"] { font-size: 16px !important; }
+        [data-testid="stHorizontalBlock"] { gap: 0.4rem !important; padding: 0px !important; }
+        .stButton>button { height: 3.4rem; font-size: 1.2rem !important; margin-bottom: 3px !important; }
         .suit-symbol { font-size: 1.8rem !important; }
-        .suit-ranks { font-size: 1.6rem !important; }
-        .hand-info-text { font-size: 1.2rem !important; }
+        .suit-ranks { font-size: 1.55rem !important; }
+        .table-title { font-size: 1.5rem !important; }
     }
 
-    /* STANDART KÜÇÜK/DİK TELEFONLAR İÇİN DARALTMA */
+    /* STANDART CEP TELEFONLARI */
     @media screen and (max-width: 600px) {
         html, body, [data-testid="stAppViewContainer"] { font-size: 13px !important; }
-        .stButton>button { height: 3.1rem; font-size: 1.05rem !important; }
+        .stButton>button { height: 3.0rem; font-size: 1.05rem !important; }
         [data-testid="stHorizontalBlock"] { gap: 0.2rem !important; }
         .suit-symbol { font-size: 1.4rem !important; }
         .suit-ranks { font-size: 1.25rem !important; }
-        .hand-info-text { font-size: 0.95rem !important; }
+        .table-title { font-size: 1.2rem !important; }
     }
     </style>
 """, unsafe_allow_html=True)
@@ -76,6 +83,22 @@ def extract_suit(bid: str) -> Suit | None:
     for sym, s in mapping.items():
         if sym in bid: return s
     return None
+
+def get_bid_html_class(bid: str) -> str:
+    """Deklere akış panelinde renk kodlaması yapar (Kupa-Karo kırmızı, Sinek-Maça siyah)"""
+    if "♥" in bid or "♦" in bid: return "bid-red"
+    return "bid-black"
+
+def valid_bids_above(last_bid: str | None) -> list[str]:
+    """Masadaki en son deklereye göre alt seviyedeki geçersiz butonları ayıklar"""
+    order = []
+    for lvl in range(1, 6):
+        for sym in ["♣", "♦", "♥", "♠", "NT"]: order.append(f"{lvl}{sym}")
+    if last_bid is None or last_bid == bs.BID_PASS: return [bs.BID_PASS] + order[:]
+    try:
+        idx = order.index(last_bid)
+        return [bs.BID_PASS] + order[idx + 1:]
+    except ValueError: return [bs.BID_PASS] + order[:]
 
 def is_auction_over(bids: list) -> bool:
     if len(bids) < 3: return False
@@ -114,10 +137,11 @@ def advance_live_robots():
 
 def submit_live_bid(user_bid: str):
     hands, bids = st.session_state["hands"], st.session_state["live_bids"]
-    if not bids:
+    last_real, _ = last_real_bid_and_pos(bids)
+    if not bids or last_real is None:
         correct, expl = bs.opening_bid(HandEvaluator(hands[2]))
     else:
-        correct, expl = bs.suggest_response(bids[-1][1], extract_suit(bids[-1][1]), HandEvaluator(hands[2]), 12)
+        correct, expl = bs.suggest_response(last_real, extract_suit(last_real), HandEvaluator(hands[2]), 12)
         
     ok = user_bid.strip() == correct.strip()
     bids.append((2, user_bid, "Sizin Hamleniz"))
@@ -202,7 +226,7 @@ hands = st.session_state["hands"]
 s_ev, n_ev = HandEvaluator(hands[2]), HandEvaluator(hands[0])
 
 # ───────────────────────────────────────────────
-# MOD 3: CANLI MASA SEKANSI
+# MOD 3: CANLI MASA SEKANSI (AKIŞ VE BUTON FİLTRELERİ GÜNCELLENDİ)
 # ───────────────────────────────────────────────
 if mode == "live":
     st.subheader("Canlı Masa Turnuva Simülasyonu")
@@ -213,7 +237,8 @@ if mode == "live":
     with lc2:
         st.markdown("**Masa Deklere Akışı**")
         for p, b, e in bids[-4:]:
-            st.markdown(f"{POS_EMOJI[p]} **{POS_NAMES[p]}**: `{b}` — <span style='font-size:0.85rem;color:#555'>{e}</span>", unsafe_allow_html=True)
+            cls = get_bid_html_class(b)
+            st.markdown(f"{POS_EMOJI[p]} **{POS_NAMES[p]}**: <span class='{cls}'>`{b}`</span> — <span style='font-size:0.85rem;color:#555'>{e}</span>", unsafe_allow_html=True)
             
     if st.session_state["live_feedback"]:
         if st.session_state["live_feedback_ok"]: 
@@ -223,13 +248,23 @@ if mode == "live":
         
     if not live_done:
         st.markdown("---")
-        st.markdown("##### Deklerenizi Masaya Atın:")
-        btn_cols = st.columns(4)
+        st.markdown("<div class='table-title'>Deklerenizi Masaya Atın:</div>", unsafe_allow_html=True)
+        
+        # SEVİYE ALTI BUTON KİLİTLEME FİLTRESİ ENJEKSİYONU
+        last_real, _ = last_real_bid_and_pos(bids)
+        allowed_bids = valid_bids_above(last_real)
+        
         live_buttons = [bs.BID_PASS, "1♣", "1♦", "1♥", "1♠", "1NT", "2♣", "2♦", "2♥", "2♠", "2NT", "3♣", "3♦", "3♥", "3♠", "3NT"]
+        btn_cols = st.columns(4)
+        
         for index, b in enumerate(live_buttons):
-            if btn_cols[index % 4].button(b, key=f"lbtn_{b}"):
-                submit_live_bid(b)
-                st.rerun()
+            # Eğer buton masadaki mevcut seviyenin altında kalıyorsa render etme / kilitle
+            if b != bs.BID_PASS and b not in allowed_bids:
+                btn_cols[index % 4].button(b, key=f"lbtn_{b}", disabled=True)
+            else:
+                if btn_cols[index % 4].button(b, key=f"lbtn_{b}"):
+                    submit_live_bid(b)
+                    st.rerun()
     else:
         st.success("🏁 Sekans Kurallara Uygun Olarak Tamamlandı.")
         if st.button("Sonraki Masaya Geç", type="primary", use_container_width=True): deal_new_hand(); st.rerun()
@@ -264,7 +299,7 @@ if st.session_state["feedback"] is not None:
         deal_new_hand()
         st.rerun()
 else:
-    st.markdown("##### Sisteme Göre Deklerenizi Seçin:")
+    st.markdown("<div class='table-title'>Sisteme Göre Deklerenizi Seçin:</div>", unsafe_allow_html=True)
     if st.session_state["rkcb_active"]:
         buttons = ["5♣", "5♦", "5♥", "5♠"]
     else:
