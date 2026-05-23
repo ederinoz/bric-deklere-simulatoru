@@ -8,11 +8,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 from cards import deal_hands, Suit, SUIT_SYMBOLS, SUIT_NAMES_TR, RANK_SYMBOLS
 from evaluator import HandEvaluator
-from bidding_system import (
-    opening_bid, opening_bid_trace, suggest_response, rkcb_response,
-    response_to_1nt, response_to_major, response_to_minor, BID_PASS, BID_DBL, suit_symbol,
-    overcall_or_double, respond_to_double, _bid_rank
-)
+import bidding_system as bs
 
 st.set_page_config(page_title="Briç Deklere Simülatörü", page_icon="🃏", layout="wide")
 
@@ -45,7 +41,7 @@ for _lvl in range(1, 8):
     for _sym in ["♣", "♦", "♥", "♠", "NT"]: ALL_BIDS_ORDER.append(f"{_lvl}{_sym}")
 
 def suit_color(suit: Suit) -> str:
-    return "#e03030" if suit in (Suit.HEARTS, Suit.DIAMONDS) else "#1a1a1a"
+    return "#c62828" if suit in (Suit.HEARTS, Suit.DIAMONDS) else "#1a1a1a"
 
 _DP_BADGE: dict[int, str] = {
     1: '<span style="margin-left:10px;font-size:0.73em;background:#546E7A;color:#fff;padding:1px 7px;border-radius:10px;font-weight:bold;vertical-align:middle" title="2 kartlı renk: +1 dağılım puanı">+1 Dubleton</span>',
@@ -78,11 +74,11 @@ def bid_color(bid: str) -> str:
     return "#c62828" if "♥" in bid or "♦" in bid else "#1a1a1a"
 
 def valid_bids_above(last_bid: str | None) -> list[str]:
-    if last_bid is None or last_bid == BID_PASS: return [BID_PASS] + ALL_BIDS_ORDER[:]
+    if last_bid is None or last_bid == bs.BID_PASS: return [bs.BID_PASS] + ALL_BIDS_ORDER[:]
     try:
         idx = ALL_BIDS_ORDER.index(last_bid)
-        return [BID_PASS] + ALL_BIDS_ORDER[idx + 1 :]
-    except ValueError: return [BID_PASS] + ALL_BIDS_ORDER[:]
+        return [bs.BID_PASS] + ALL_BIDS_ORDER[idx + 1 :]
+    except ValueError: return [bs.BID_PASS] + ALL_BIDS_ORDER[:]
 
 def is_auction_over(bids: list) -> bool:
     if len(bids) < 3: return False
@@ -94,28 +90,28 @@ def is_auction_over(bids: list) -> bool:
             if last_real.startswith("4") or ("NT" in last_real and int(last_real[0]) >= 3): pass 
             else: return False
     last_three = [b for _, b, _ in bids[-3:]]
-    if all(b == BID_PASS for b in last_three):
-        if any(b != BID_PASS for _, b, _ in bids): return True
-    if len(bids) >= 4 and all(b == BID_PASS for _, b, _ in bids[-4:]): return True
+    if all(b == bs.BID_PASS for b in last_three):
+        if any(b != bs.BID_PASS for _, b, _ in bids): return True
+    if len(bids) >= 4 and all(b == bs.BID_PASS for _, b, _ in bids[-4:]): return True
     return False
 
 def last_real_bid_and_pos(bids: list) -> tuple[str | None, int | None]:
     for b_pos, bid, _ in reversed(bids):
-        if bid not in (BID_PASS, BID_DBL, "RKON"): return bid, b_pos
+        if bid not in (bs.BID_PASS, bs.BID_DBL, "RKON"): return bid, b_pos
     return None, None
 
 def local_find_doubled_suit_bid(bids: list, partner_pos: int) -> str:
     for pos, bid, _ in reversed(bids):
-        if pos == partner_pos and bid not in (BID_PASS, BID_DBL, "RKON"): return bid
+        if pos == partner_pos and bid not in (bs.BID_PASS, bs.BID_DBL, "RKON"): return bid
     return "1♣"
 
 def robot_bid_for_pos(pos: int, hands: list, bids: list) -> tuple[str, str]:
     ev, partner, seat = HandEvaluator(hands[pos]), (pos + 2) % 4, len(bids) + 1
     last_real, last_real_pos = last_real_bid_and_pos(bids)
-    if last_real is None: return opening_bid(ev, seat=min(seat, 4))
+    if last_real is None: return bs.opening_bid(ev, seat=min(seat, 4))
     
-    our_last     = next((b for p, b, _ in reversed(bids) if p == pos     and b != BID_PASS), None)
-    partner_last = next((b for p, b, _ in reversed(bids) if p == partner and b != BID_PASS), None)
+    our_last     = next((b for p, b, _ in reversed(bids) if p == pos     and b != bs.BID_PASS), None)
+    partner_last = next((b for p, b, _ in reversed(bids) if p == partner and b != bs.BID_PASS), None)
 
     if last_real == "2♣" and last_real_pos == partner:
         if ev.hcp() >= 8:
@@ -128,25 +124,25 @@ def robot_bid_for_pos(pos: int, hands: list, bids: list) -> tuple[str, str]:
         if "2NT" in bids_strings and (bids_strings[-1] == "3♣" or bids_strings[-1] == "3♦"):
             if pos == 0: return "3NT", "Ortak minör rengini tekrarladı, 15+ dengeli puanla 3NT'ye tamamlıyorum."
 
-    suggested_bid, expl = BID_PASS, "Pas"
+    suggested_bid, expl = bs.BID_PASS, "Pas"
     if last_real_pos == partner:
-        if last_real == BID_DBL:
+        if last_real == bs.BID_DBL:
             doubled = local_find_doubled_suit_bid(bids, partner)
-            suggested_bid, expl = respond_to_double(doubled, ev)
+            suggested_bid, expl = bs.respond_to_double(doubled, ev)
         else:
             s = extract_suit(last_real)
-            suggested_bid, expl = suggest_response(last_real, s, ev, 12)
+            suggested_bid, expl = bs.suggest_response(last_real, s, ev, 12)
             if "tekrifi" in expl or "tıkacı" in expl or "1NT" in last_real:
                 expl = f"{last_real} konuşmasına natürel sistem yanıtı"
     elif our_last is None and partner_last is None: 
-        suggested_bid, expl = overcall_or_double(ev, last_real)
+        suggested_bid, expl = bs.overcall_or_double(ev, last_real)
     elif our_last is None and partner_last is not None:
         p_suit = extract_suit(partner_last)
         if p_suit and ev.length(p_suit) >= 3 and ev.hcp() >= 6:
-            sym = suit_symbol(p_suit)
+            sym = bs.suit_symbol(p_suit)
             suggested_bid, expl = f"2{sym}", f"Ortağın araya giriş rengine destek – 3+ {sym}"
 
-    if suggested_bid != BID_PASS and suggested_bid != BID_DBL and "RKON" not in suggested_bid:
+    if suggested_bid != bs.BID_PASS and suggested_bid != bs.BID_DBL and "RKON" not in suggested_bid:
         try:
             current_idx = ALL_BIDS_ORDER.index(last_real)
             suggested_idx = ALL_BIDS_ORDER.index(suggested_bid)
@@ -154,33 +150,33 @@ def robot_bid_for_pos(pos: int, hands: list, bids: list) -> tuple[str, str]:
                 if "♥" in suggested_bid and current_idx < ALL_BIDS_ORDER.index("3♥"):
                     if ev.length(Suit.HEARTS) >= 3 and ev.hcp() >= 6:
                         suggested_bid, expl = "3♥", "Ortağın Kupa açışına yarışmacı destek (Seviye düzeltildi)"
-                    else: suggested_bid, expl = BID_PASS, "Yetersiz seviye nedeniyle Pas"
-                else: suggested_bid, expl = BID_PASS, "Yetersiz seviye nedeniyle Pas"
+                    else: suggested_bid, expl = bs.BID_PASS, "Yetersiz seviye nedeniyle Pas"
+                else: suggested_bid, expl = bs.BID_PASS, "Yetersiz seviye nedeniyle Pas"
         except ValueError: pass
     return suggested_bid, expl
 
 def correct_south_live(bids: list, hands: list) -> tuple[str, str]:
     s_ev, n_ev, seat = HandEvaluator(hands[2]), HandEvaluator(hands[0]), len(bids) + 1
     last_real, last_real_pos = last_real_bid_and_pos(bids)
-    if last_real is None: return opening_bid(s_ev, seat=min(seat, 4))
+    if last_real is None: return bs.opening_bid(s_ev, seat=min(seat, 4))
     if last_real_pos == 0:
-        if last_real == BID_DBL: return respond_to_double(last_real, s_ev)
+        if last_real == bs.BID_DBL: return bs.respond_to_double(last_real, s_ev)
         if last_real == "2NT" and s_ev.length(Suit.SPADES) >= 5:
             return "4♠", "Ortağın dengeli davet/GF dekleresine karşı 5'li güçlü majörümüzle koz kontratını seçiyoruz."
-        return suggest_response(last_real, extract_suit(last_real), s_ev, n_ev.hcp())
+        return bs.suggest_response(last_real, extract_suit(last_real), s_ev, n_ev.hcp())
     if last_real_pos in (1, 3):
-        if any(p == 2 and b == BID_PASS for p, b, _ in bids):
-            north_last = next((b for p, b, _ in reversed(bids) if p == 0 and b != BID_PASS), None)
+        if any(p == 2 and b == bs.BID_PASS for p, b, _ in bids):
+            north_last = next((b for p, b, _ in reversed(bids) if p == 0 and b != bs.BID_PASS), None)
             if north_last:
                 n_suit = extract_suit(north_last)
                 if n_suit and s_ev.length(n_suit) < 3:
-                    return BID_PASS, "İlk turda pas geçtikten sonra ortağın rengine fit yok, Pas."
-            return BID_PASS, "Sınırlanmış el ile yarışmaya dahil olunmaz, Pas."
-        north_last = next((b for p, b, _ in reversed(bids) if p == 0 and b != BID_PASS), None)
-        if north_last is None: return overcall_or_double(s_ev, last_real)
+                    return bs.BID_PASS, "İlk turda pas geçtikten sonra ortağın rengine fit yok, Pas."
+            return bs.BID_PASS, "Sınırlanmış el ile yarışmaya dahil olunmaz, Pas."
+        north_last = next((b for p, b, _ in reversed(bids) if p == 0 and b != bs.BID_PASS), None)
+        if north_last is None: return bs.overcall_or_double(s_ev, last_real)
         n_suit = extract_suit(north_last)
         if n_suit and s_ev.length(n_suit) >= 3 and s_ev.hcp() >= 6:
-            sym = suit_symbol(n_suit)
+            sym = bs.suit_symbol(n_suit)
             target_bid = f"4{sym}" if s_ev.hcp() >= 10 else f"3{sym}"
             try:
                 if ALL_BIDS_ORDER.index(target_bid) > ALL_BIDS_ORDER.index(last_real):
@@ -188,8 +184,8 @@ def correct_south_live(bids: list, hands: list) -> tuple[str, str]:
             except ValueError: pass
     if "2NT" in [b for _, b, _ in bids] and not (last_real and (last_real.startswith("4") or "NT" in last_real)):
         n_suit = st.session_state.get("north_suit")
-        if n_suit: return f"4{suit_symbol(n_suit)}", "Game Forcing (GF) aktif – Zona tamamlanmalı!"
-    return BID_PASS, "Pas önerilir"
+        if n_suit: return f"4{bs.suit_symbol(n_suit)}", "Game Forcing (GF) aktif – Zona tamamlanmalı!"
+    return bs.BID_PASS, "Pas önerilir"
 
 def advance_live_robots():
     hands, bids = st.session_state["hands"], st.session_state["live_bids"]
@@ -226,7 +222,7 @@ def new_hand_for_mode(mode: str):
         hands = deal_hands()
         if not _south_hand_ok(hands): continue
         n_ev = HandEvaluator(hands[0])
-        nb, _ = opening_bid(n_ev, seat=1)
+        nb, _ = bs.opening_bid(n_ev, seat=1)
         ns = extract_suit(nb)
         if mode in ("opening", "rkcb", "full", "live"): return hands
         if mode == "response_major" and ns in (Suit.HEARTS, Suit.SPADES) and nb.startswith("1"): return hands
@@ -241,7 +237,7 @@ def deal_new_hand():
     st.session_state["feedback"], st.session_state["feedback_ok"], st.session_state["correct_bid"], st.session_state["step"], st.session_state["full_step"], st.session_state["rkcb_trump_chosen"], st.session_state["trump"], st.session_state["live_feedback"], st.session_state["live_feedback_ok"], st.session_state["live_feedback_correct"] = None, None, None, 0, 0, False, None, None, None, None
     st.session_state["seat"] = random.randint(1, 3) if mode == "opening" else 1
     n_ev = HandEvaluator(hands[0])
-    nb, _ = opening_bid(n_ev, seat=1)
+    nb, _ = bs.opening_bid(n_ev, seat=1)
     st.session_state["north_bid"], st.session_state["north_suit"] = nb, extract_suit(nb)
     if mode == "live":
         dealer = random.randint(0, 3)
@@ -252,18 +248,18 @@ def deal_new_hand():
 def submit_bid(user_bid: str):
     mode, hands = st.session_state["mode"], st.session_state["hands"]
     s_ev, n_ev = HandEvaluator(hands[2]), HandEvaluator(hands[0])
-    if mode == "opening": correct, explanation = opening_bid(s_ev, seat=st.session_state["seat"])
-    elif mode == "response_major": correct, explanation = suggest_response(st.session_state["north_bid"], st.session_state["north_suit"], s_ev, n_ev.hcp())
-    elif mode == "response_minor": correct, explanation = response_to_minor(st.session_state["north_suit"], s_ev)
-    elif mode == "response_1nt": correct, explanation = response_to_1nt(s_ev)
-    elif mode == "rkcb": correct, explanation = rkcb_response(s_ev, st.session_state["trump"])
+    if mode == "opening": correct, explanation = bs.opening_bid(s_ev, seat=st.session_state["seat"])
+    elif mode == "response_major": correct, explanation = bs.suggest_response(st.session_state["north_bid"], st.session_state["north_suit"], s_ev, n_ev.hcp())
+    elif mode == "response_minor": correct, explanation = bs.response_to_minor(st.session_state["north_suit"], s_ev)
+    elif mode == "response_1nt": correct, explanation = bs.response_to_1nt(s_ev)
+    elif mode == "rkcb": correct, explanation = bs.rkcb_response(s_ev, st.session_state["trump"])
     elif mode == "full":
         if st.session_state["full_step"] == 0:
-            correct, explanation = suggest_response(st.session_state["north_bid"], st.session_state["north_suit"], s_ev, n_ev.hcp())
+            correct, explanation = bs.suggest_response(st.session_state["north_bid"], st.session_state["north_suit"], s_ev, n_ev.hcp())
             st.session_state["full_step"] = 1
         else:
             trump = st.session_state["trump"] or st.session_state["north_suit"]
-            correct, explanation = rkcb_response(s_ev, trump or Suit.SPADES)
+            correct, explanation = bs.rkcb_response(s_ev, trump or Suit.SPADES)
     else: return
     ok = user_bid.strip() == correct.strip()
     st.session_state["feedback"], st.session_state["feedback_ok"], st.session_state["correct_bid"] = explanation, ok, correct
@@ -351,7 +347,7 @@ if mode == "live":
             if cell == "": rc.write(" "); continue
             pos_idx, bid = cell
             if bid == "👉": rc.markdown("<div style='text-align:center;background:#dbeafe;border:2px dashed #1565C0;border-radius:6px;padding:6px;font-weight:bold;color:#1565C0'>👉 Sıranız</div>", unsafe_allow_html=True)
-            elif bid == BID_PASS: rc.markdown("<div style='text-align:center;color:#888;font-style:italic;padding:4px'>PAS</div>", unsafe_allow_html=True)
+            elif bid == bs.BID_PASS: rc.markdown("<div style='text-align:center;color:#888;font-style:italic;padding:4px'>PAS</div>", unsafe_allow_html=True)
             else:
                 bc, bg = bid_color(bid), ("#fff9e6" if pos_idx == 2 else "#ffffff")
                 rc.markdown(f"<div style='text-align:center;background:{bg};border-radius:5px;padding:4px;font-weight:bold;font-size:1.15em;color:{bc}'>{bid}</div>", unsafe_allow_html=True)
@@ -377,8 +373,8 @@ if mode == "live":
         st.markdown("#### ✋ Sıra Sizde — Deklerenizi Seçin")
         pas_col, _ = st.columns([1, 5])
         with pas_col:
-            if st.button("PAS", use_container_width=True, key="live_btn_PAS"): submit_live_bid(BID_PASS); st.rerun()
-        real_bids = [b for b in available if b != BID_PASS and b[0] <= "5"]
+            if st.button("PAS", use_container_width=True, key="live_btn_PAS"): submit_live_bid(bs.BID_PASS); st.rerun()
+        real_bids = [b for b in available if b != bs.BID_PASS and b[0] <= "5"]
         if real_bids:
             st.markdown("**Seviyeli Deklereler:**")
             for lvl in range(1, 6):
@@ -452,25 +448,24 @@ def bid_buttons(bids_list: list[str], cols_per_row: int = 5):
 
 if mode == "opening":
     st.markdown("#### Açılış Deklereniz")
-    bid_buttons([BID_PASS, "1♣", "1♦", "1♥", "1♠", "1NT", "2♣", "2♦", "2♥", "2♠", "2NT", "3♣", "3♦", "3♥", "3♠"])
+    bid_buttons([bs.BID_PASS, "1♣", "1♦", "1♥", "1♠", "1NT", "2♣", "2♦", "2♥", "2♠", "2NT", "3♣", "3♦", "3♥", "3♠"])
 elif mode == "response_major":
     st.markdown(f"#### {north_bid} Açılışına Yanıtınız")
-    bid_buttons([BID_PASS, "1♠", "1NT", "2♣", "2♦", "2♥", "3♥", "4♥", "2NT"] if north_suit == Suit.HEARTS else [BID_PASS, "1NT", "2♣", "2♦", "2♥", "2♠", "3♠", "4♠", "2NT"])
+    bid_buttons([bs.BID_PASS, "1♠", "1NT", "2♣", "2♦", "2♥", "3♥", "4♥", "2NT"] if north_suit == Suit.HEARTS else [bs.BID_PASS, "1NT", "2♣", "2♦", "2♥", "2♠", "3♠", "4♠", "2NT"])
 elif mode == "response_minor":
     st.markdown(f"#### {north_bid} Açılışına Yanıtınız")
-    # TBF minör yanıt setleri butonları (Majörler, NT'ler ve destekler)
-    bid_buttons([BID_PASS, "1♦", "1♥", "1♠", "1NT", "2♣", "2♦", "3♣", "3♦", "2NT", "3NT"])
+    bid_buttons([bs.BID_PASS, "1♦", "1♥", "1♠", "1NT", "2♣", "2♦", "3♣", "3♦", "2NT", "3NT"])
 elif mode == "response_1nt":
     st.markdown("#### 1NT Açılışına Yanıtınız")
-    bid_buttons([BID_PASS, "2♣", "2♦", "2♥", "2NT", "3NT"], cols_per_row=6)
+    bid_buttons([bs.BID_PASS, "2♣", "2♦", "2♥", "2NT", "3NT"], cols_per_row=6)
 elif mode == "rkcb" and st.session_state["rkcb_trump_chosen"]:
     st.markdown("#### RKCB 0314 Yanıtınız")
     bid_buttons(["5♣", "5♦", "5♥", "5♠"], cols_per_row=4)
 elif mode == "full" and st.session_state["feedback"] is None:
     if st.session_state["full_step"] == 0:
         st.markdown(f"#### {north_bid} Açılışına Yanıtınız")
-        if north_suit in (Suit.CLUBS, Suit.DIAMONDS): bid_buttons([BID_PASS, "1♦", "1♥", "1♠", "1NT", "2♣", "2♦", "2NT", "3NT"])
-        else: bid_buttons([BID_PASS, "1♠", "1NT", "2♣", "2♦", "2♥", "3♥", "4♥", "2NT"])
+        if north_suit in (Suit.CLUBS, Suit.DIAMONDS): bid_buttons([bs.BID_PASS, "1♦", "1♥", "1♠", "1NT", "2♣", "2♦", "2NT", "3NT"])
+        else: bid_buttons([bs.BID_PASS, "1♠", "1NT", "2♣", "2♦", "2♥", "3♥", "4♥", "2NT"])
     elif st.session_state["full_step"] == 1:
         st.markdown("#### RKCB 0314 Yanıtı (Partner 4NT sordu)")
         bid_buttons(["5♣", "5♦", "5♥", "5♠"], cols_per_row=4)
