@@ -201,6 +201,19 @@ def correct_south_live(bids: list, hands: list) -> tuple[str, str]:
         return suggest_response(last_real, extract_suit(last_real), s_ev, n_ev.hcp())
 
     if last_real_pos in (1, 3):
+        # --- BUG FIX: GÜNEY DAHA ÖNCE PAS GEÇTİYSE MANTIKSAL KONTROL ---
+        south_passed_before = any(p == 2 and b == BID_PASS for p, b, _ in bids)
+        
+        if south_passed_before:
+            north_last = next((b for p, b, _ in reversed(bids) if p == 0 and b != BID_PASS), None)
+            if north_last:
+                n_suit = extract_suit(north_last)
+                # Ortağın 3. seviyedeki yarışma rengine (Örn: 3 Kupa) 3 karttan az fitimiz varsa PAS geçmeliyiz
+                if n_suit and s_ev.length(n_suit) < 3:
+                    return BID_PASS, "İlk turda pas geçtikten sonra ortağın rengine fit yok, güvenli bölgede kalıp Pas geçiyoruz."
+            return BID_PASS, "Sınırlanmış (Pas geçmiş) el ile yarışmaya dahil olunmaz, Pas."
+
+        # Eğer daha önce pas geçmediysek (normal araya giriş senaryosu)
         north_last = next((b for p, b, _ in reversed(bids) if p == 0 and b != BID_PASS), None)
         if north_last is None: 
             return overcall_or_double(s_ev, last_real)
