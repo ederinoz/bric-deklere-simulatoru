@@ -107,15 +107,12 @@ def calculate_correct_live_bid(bids: list, user_hand_ev: HandEvaluator) -> tuple
     if last_real is None:
         return bs.opening_bid(user_hand_ev, seat=3)
         
-    # Eğer en son deklereyi ortak (Kuzey) attıysa -> Biz Cevapçıyız
     if last_real_pos == 0:
         return bs.suggest_response(last_real, extract_suit(last_real), user_hand_ev, 12)
         
-    # Eğer ortalıkta rakip kontrası varsa -> Kontraya cevap
     if bids and bids[-1][1] == bs.BID_DBL and bids[-1][0] == 0:
         return bs.respond_to_double(last_real, user_hand_ev)
         
-    # Eğer rakip araya girdiyse veya açtıysa -> Defans / Yarışma
     p_passed_twice = st.session_state["live_partner_pass_count"] >= 2
     my_prev = next((b for p, b, _ in reversed(bids) if p == 2 and b != bs.BID_PASS), None)
     
@@ -131,6 +128,11 @@ def robot_bid_for_pos(pos: int, hands: list, bids: list) -> tuple[str, str]:
     seat = len(bids) + 1
     last_real, last_real_pos = last_real_bid_and_pos(bids)
     
+    # EMİR FİLTRESİ: Ortak (Güney) açış yaptıysa ve robotta 6+ HKP varsa PAS geçmesi engellenir
+    if partner == 2 and last_real is not None and ev.hcp() >= 6:
+        bid, expl = bs.suggest_response(last_real, extract_suit(last_real), ev, 12)
+        if bid != bs.BID_PASS: return bid, expl
+
     if last_real is None:
         bid, expl = bs.opening_bid(ev, seat=min(seat, 4))
         if bid != bs.BID_PASS: st.session_state["live_opener_pos"] = pos
@@ -166,7 +168,6 @@ def submit_live_bid(user_bid: str):
     hands, bids = st.session_state["hands"], st.session_state["live_bids"]
     correct, expl = calculate_correct_live_bid(bids, HandEvaluator(hands[2]))
     
-    # SERT ANOMALİ KORUMASI: Gerekçe ile Buton senkronizasyon emniyeti
     if user_bid == bs.BID_PASS and "PAS" in expl: correct = bs.BID_PASS
     if user_bid == bs.BID_DBL and "Kontru" in expl: correct = bs.BID_DBL
         
@@ -262,9 +263,6 @@ if st.session_state["hands"] is None:
 hands = st.session_state["hands"]
 s_ev, n_ev = HandEvaluator(hands[2]), HandEvaluator(hands[0])
 
-# ───────────────────────────────────────────────
-# MOD 3: CANLI MASA SEKANSI (KUZEY ELİ İFŞASI DAHİL)
-# ───────────────────────────────────────────────
 if mode == "live":
     st.subheader("Canlı Masa Turnuva Simülasyonu")
     bids, live_done = st.session_state["live_bids"], st.session_state["live_done"]
@@ -272,7 +270,6 @@ if mode == "live":
     lc1, lc2 = st.columns([1, 1])
     with lc1: 
         render_responsive_hand(s_ev, "🔴 Sizin Kartlarınız (Güney)")
-        # ÖZELLİK: İhale bitince Kuzey'in (ortağın) elini ifşa etme katmanı
         if live_done:
             st.divider()
             render_responsive_hand(n_ev, "Kuzey (Ortağınızın Kartları)", is_north=True)
@@ -287,7 +284,7 @@ if mode == "live":
         if st.session_state["live_feedback_ok"]: 
             st.success(f"✅ Kusursuz Hamle! Şunu demeniz önerilirdi: {st.session_state['live_feedback']}")
         else: 
-            st.error(f"❌ TBF Önerisi: {st.session_state['live_feedback_correct']} | Şunu demeniz önerilirdi: {st.session_state['live_feedback']}")
+            st.error(f"❌ TBF Önerisi: {st.session_state['live_feedback_correct']} | {st.session_state['live_feedback']}")
         
     if not live_done:
         st.markdown("---")
@@ -301,7 +298,6 @@ if mode == "live":
             for sym in ["♣", "♦", "♥", "♠", "NT"]:
                 live_buttons.append(f"{lvl}{sym}")
         
-        # GEÇERSİZ BUTONLARI EKRANDAN TAM KAZIMA FİLTRESİ
         visible_buttons = [b for b in live_buttons if b in (bs.BID_PASS, bs.BID_DBL) or b in allowed_bids]
         
         btn_cols = st.columns(4)
@@ -314,9 +310,6 @@ if mode == "live":
         if st.button("Sonraki Masaya Geç ➡️", type="primary", use_container_width=True): deal_new_hand(); st.rerun()
     st.stop()
 
-# ───────────────────────────────────────────────
-# MOD 1 & 2: STANDART ANTRENMAN EKRANI
-# ───────────────────────────────────────────────
 sc1, sc2 = st.columns([1, 1])
 with sc1:
     render_responsive_hand(s_ev, "🔴 Sizin Kartlarınız (Güney)")
