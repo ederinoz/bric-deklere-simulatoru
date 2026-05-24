@@ -75,7 +75,7 @@ def response_to_major(opener_suit: Suit, ev: HandEvaluator) -> tuple[str, str]:
     
     if hcp >= 12 and supp < 4:
         for s in [Suit.CLUBS, Suit.DIAMONDS]:
-            if ev.length(s) >= 5: return f"2{suit_symbol(s)}", f"GF Kuvvetli El ile Uzun Yeni Minör Önceliği ({suit_symbol(s)}, 12+ HKP)"
+            if ev.length(s) >= 5: return f"2{suit_symbol(s)}", f"GF Kuvvetli El ile Uzun Yeni Minör Önceliği Zorlayıcı ({suit_symbol(s)}, 12+ HKP)"
 
     if supp >= 3 and 10 <= hcp <= 12: return f"3{sym}", f"Limitli Davet Artışı — 3+ Desteğe Karşı 10-12 HKP"
     if supp >= 3 and 6 <= hcp <= 9: return f"2{sym}", f"Basit Yapıcı Artış — 3+ Desteğe Karşı 6-9 HKP"
@@ -152,7 +152,10 @@ def rkcb_response(ev: HandEvaluator, trump: Suit) -> tuple[str, str]:
 
 def suggest_response(opener_bid: str, opener_suit: Suit | None, ev: HandEvaluator, partner_hcp: int = 12) -> tuple[str, str]:
     hcp = ev.hcp()
-    if hcp < 6: return BID_PASS, "PAS"
+    
+    # ZON GÜCÜ DURDURMA KİLİDİ: Toplam puan 25'i geçiyor veya tek başına 16+ varsa robot pas geçemez.
+    is_game_forcing = (partner_hcp + hcp >= 25) or (hcp >= 16)
+    
     if opener_bid == "1NT": return response_to_1nt(ev)
     
     lvl = int(opener_bid[0]) if opener_bid and opener_bid[0].isdigit() else 1
@@ -164,10 +167,25 @@ def suggest_response(opener_bid: str, opener_suit: Suit | None, ev: HandEvaluato
                 if s != opener_suit and ev.length(s) >= 5:
                     target = _min_level_bid(suit_symbol(s), opener_bid)
                     if target: return target, f"Yeni Renk 2 Seviyesinde Tur Zorlaması ({suit_symbol(s)}, 10+ HKP)"
+        
+        if is_game_forcing:
+            # Puan devasa ise pas seçeneklerini ele ve direkt oyun/davet basamaklarına zorla
+            if opener_suit in (Suit.HEARTS, Suit.SPADES):
+                supp = ev.length(opener_suit)
+                if supp >= 4: return "2NT", "Jacoby 2NT — Şlem ve Oyun Zorlaması (GF)"
+                if hcp >= 13: return "3NT", "Dengeli Güçlü El — Direkt Oyun İlanı"
+            else:
+                if hcp >= 13: return "3NT", "Dengeli Güçlü El — Direkt Oyun İlanı"
+                
         if opener_suit in (Suit.HEARTS, Suit.SPADES): return response_to_major(opener_suit, ev)
         if opener_suit in (Suit.CLUBS, Suit.DIAMONDS): return response_to_minor(opener_suit, ev)
             
     if opener_bid == "4NT" and opener_suit: return rkcb_response(ev, opener_suit)
+    
+    if is_game_forcing:
+        return _min_level_bid("NT", opener_bid) or "3NT", "Zon Gücü Kilidi Aktif — Pas Geçilemez, Oyun Değerli Dağılım"
+        
+    if hcp < 6: return BID_PASS, "PAS"
     return BID_PASS, "PAS"
 
 def overcall_or_double(ev: HandEvaluator, opponent_bid: str, partner_passed: bool = False) -> tuple[str, str]:
@@ -191,7 +209,6 @@ def overcall_or_double(ev: HandEvaluator, opponent_bid: str, partner_passed: boo
         min_bid = _min_level_bid(sym, opponent_bid)
         if min_bid:
             lvl = int(min_bid[0])
-            # ERGUN FİLTRESİ 1: Ortak pas geçmişken 2 seviyesinde riskli araya girmeyi engelle (Min 11 HKP şartı)
             if partner_passed and lvl >= 2 and hcp < 11:
                 continue
             if lvl <= 2 and length >= 5 and 8 <= hcp <= 17:
@@ -200,10 +217,6 @@ def overcall_or_double(ev: HandEvaluator, opponent_bid: str, partner_passed: boo
     return BID_PASS, "PAS"
 
 def competitive_fallback(ev: HandEvaluator, last_bid: str, my_previous_bid: str | None, partner_passed_twice: bool = False) -> tuple[str, str]:
-    """
-    ERGUN FİLTRESİ 2: Kullanıcı 4'lü majörle araya girdikten sonra ortak pas geçmeye devam ederse,
-    elde ekstra kuvvet (16+ HKP) yoksa tek başına majör tekrarı yapılmasını engeller, PAS geçirir.
-    """
     hcp = ev.hcp()
     if my_previous_bid and len(my_previous_bid) > 1:
         my_suit_sym = my_previous_bid[1:]
