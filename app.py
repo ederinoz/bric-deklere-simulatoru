@@ -244,7 +244,7 @@ def submit_bid(user_bid: str):
                 st.session_state["trump"] = extract_suit(st.session_state["north_bid"]) or Suit.SPADES
     else: return
     
-    if user_bid == bs.BID_DBL && "Kontru" in explanation: correct = bs.BID_DBL
+    if user_bid == bs.BID_DBL and "Kontru" in explanation: correct = bs.BID_DBL
         
     ok = user_bid.strip() == correct.strip()
     st.session_state["feedback"], st.session_state["feedback_ok"], st.session_state["correct_bid"] = explanation, ok, correct
