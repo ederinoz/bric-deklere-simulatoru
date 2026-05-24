@@ -3,12 +3,12 @@ import random
 import time
 
 # =========================================================
-# TBF BRİÇ AKADEMİ v25.0
-# FULL TRAINING + AUCTION ENGINE
+# TBF BRİÇ AKADEMİ v30.0
+# FULL REBUILD STABLE EDITION
 # =========================================================
 
 st.set_page_config(
-    page_title="TBF Briç Akademi v25.0",
+    page_title="TBF Briç Akademi v30.0",
     layout="centered"
 )
 
@@ -56,7 +56,7 @@ st.markdown("""
     font-size:18px;
 }
 
-.north-box{
+.partner-box{
     background:#eff6ff;
     color:#1e3a8a;
     padding:14px;
@@ -93,9 +93,19 @@ SUIT_ORDER = {
 }
 
 CARD_RANK = {
-    '2':2,'3':3,'4':4,'5':5,'6':6,
-    '7':7,'8':8,'9':9,'10':10,
-    'J':11,'Q':12,'K':13,'A':14
+    '2':2,
+    '3':3,
+    '4':4,
+    '5':5,
+    '6':6,
+    '7':7,
+    '8':8,
+    '9':9,
+    '10':10,
+    'J':11,
+    'Q':12,
+    'K':13,
+    'A':14
 }
 
 ALL_BIDS = [
@@ -116,7 +126,8 @@ ALL_BIDS = [
 
     "7♣","7♦","7♥","7♠","7NT",
 
-    "X","XX"
+    "X",
+    "XX"
 ]
 
 # =========================================================
@@ -193,7 +204,9 @@ class HandEvaluator:
         total = 0
 
         for s in hand:
+
             for c in hand[s]:
+
                 total += vals.get(c, 0)
 
         return total
@@ -238,12 +251,21 @@ class BiddingLegalityEngine:
         ]
 
         if not bids:
-            return proposed not in ["X","XX"]
+
+            return proposed not in [
+                "X",
+                "XX"
+            ]
 
         if proposed == "X":
-            return history[-1]["bid"] not in ["X","XX"]
+
+            return history[-1]["bid"] not in [
+                "X",
+                "XX"
+            ]
 
         if proposed == "XX":
+
             return history[-1]["bid"] == "X"
 
         ll = int(bids[-1][0])
@@ -263,7 +285,7 @@ class BiddingLegalityEngine:
         )
 
 # =========================================================
-# AI
+# AI ENGINE
 # =========================================================
 
 class AuctionAI:
@@ -282,11 +304,15 @@ class AuctionAI:
 
         candidates = []
 
-        # response logic
+        # =====================================================
+        # RESPONSE LOGIC
+        # =====================================================
 
         if history:
 
             partner_bid = history[-1]["bid"]
+
+            # 1NT Stayman
 
             if partner_bid == "1NT":
 
@@ -298,7 +324,33 @@ class AuctionAI:
 
                     candidates.append("2♣")
 
-        # opening logic
+            # support raises
+
+            if partner_bid == "1♠":
+
+                if sp >= 3 and hcp >= 6:
+
+                    if hcp <= 9:
+                        candidates.append("2♠")
+                    elif hcp <= 12:
+                        candidates.append("3♠")
+                    else:
+                        candidates.append("4♠")
+
+            if partner_bid == "1♥":
+
+                if he >= 3 and hcp >= 6:
+
+                    if hcp <= 9:
+                        candidates.append("2♥")
+                    elif hcp <= 12:
+                        candidates.append("3♥")
+                    else:
+                        candidates.append("4♥")
+
+        # =====================================================
+        # OPENING LOGIC
+        # =====================================================
 
         if (
             15 <= hcp <= 17
@@ -320,6 +372,10 @@ class AuctionAI:
                 candidates.append("1♣")
 
         candidates.append("PAS")
+
+        # =====================================================
+        # LEGAL FILTER
+        # =====================================================
 
         for bid in candidates:
 
@@ -343,7 +399,7 @@ class AuctionResolver:
         if len(history) < 4:
             return None
 
-        # pass out
+        # PASS OUT
 
         if all(
             h["bid"] == "PAS"
@@ -355,7 +411,7 @@ class AuctionResolver:
                     "Tüm oyuncular PAS dedi. El pas geçti."
             }
 
-        # contract
+        # CONTRACT
 
         last_three = history[-3:]
 
@@ -405,6 +461,22 @@ class TrainingEvaluator:
 
         balanced = HandEvaluator.is_balanced(hand)
 
+        # weak hands
+
+        if hcp < 12:
+
+            if bid != "PAS":
+
+                return (
+                    False,
+                    "❌ Açılış için puan yetersiz."
+                )
+
+            return (
+                True,
+                "✅ Doğru PAS."
+            )
+
         # 1NT
 
         if (
@@ -416,41 +488,45 @@ class TrainingEvaluator:
 
                 return (
                     False,
-                    "❌ Yanlış. Dengeli 15-17 elde 1NT açılmalıydı."
+                    "❌ Dengeli 15-17 elde 1NT açılmalıydı."
                 )
+
+            return (
+                True,
+                "✅ Doğru 1NT açılışı."
+            )
 
         # 1♠
 
-        if hcp >= 12 and sp >= 5:
+        if sp >= 5:
 
             if bid != "1♠":
 
                 return (
                     False,
-                    "❌ Yanlış. 5'li majör ile 1♠ açılmalıydı."
+                    "❌ 5'li pik ile 1♠ açılmalıydı."
                 )
+
+            return (
+                True,
+                "✅ Doğru majör açılışı."
+            )
 
         # 1♥
 
-        if hcp >= 12 and he >= 5:
+        if he >= 5:
 
             if bid != "1♥":
 
                 return (
                     False,
-                    "❌ Yanlış. 5'li majör ile 1♥ açılmalıydı."
+                    "❌ 5'li kupa ile 1♥ açılmalıydı."
                 )
 
-        # PASS
-
-        if hcp < 12:
-
-            if bid != "PAS":
-
-                return (
-                    False,
-                    "❌ Yanlış. Açılış için puan yetersiz."
-                )
+            return (
+                True,
+                "✅ Doğru majör açılışı."
+            )
 
         return (
             True,
@@ -476,9 +552,13 @@ class TrainingEvaluator:
         sp = len(hand["♠"])
         he = len(hand["♥"])
 
-        partner_bid = history[0]["bid"]
+        partner_bid = next(
+            h["bid"]
+            for h in history
+            if h["player"] == "Kuzey"
+        )
 
-        # STAYMAN
+        # 1NT response
 
         if partner_bid == "1NT":
 
@@ -509,7 +589,12 @@ class TrainingEvaluator:
                         "❌ Zayıf elde PAS geçilmeliydi."
                     )
 
-        # MAJOR SUPPORT
+                return (
+                    True,
+                    "✅ Doğru PAS."
+                )
+
+        # support raise
 
         if partner_bid == "1♠":
 
@@ -547,7 +632,7 @@ class TrainingEvaluator:
         )
 
 # =========================================================
-# INIT
+# INIT GAME
 # =========================================================
 
 def init_game(mode):
@@ -556,7 +641,7 @@ def init_game(mode):
 
         hands = BridgeDeck.generate_and_deal()
 
-        hcp = HandEvaluator.get_hcp(
+        south_hcp = HandEvaluator.get_hcp(
             hands["Güney"]
         )
 
@@ -565,30 +650,47 @@ def init_game(mode):
             for s in hands["Güney"]
         )
 
+        # opening training filter
+
         if (
             mode == "Kendi Açılış Pratiğiniz"
             and
-            (hcp >= 9 or longest >= 7)
+            south_hcp < 9
+            and
+            longest < 7
         ):
-            break
+            continue
 
-        if mode != "Kendi Açılış Pratiğiniz":
-            break
+        # response mode north opening filter
+
+        if mode == "Ortak Açılışına Yanıtlar":
+
+            north_hcp = HandEvaluator.get_hcp(
+                hands["Kuzey"]
+            )
+
+            if north_hcp < 12:
+                continue
+
+        break
 
     history = []
 
     dealer = random.choice(PLAYERS)
 
-    current_turn = dealer
+    # =====================================================
+    # RESPONSE MODE
+    # =====================================================
 
-    # ortak açılışı
-
-    if mode == "Ortak Açışına Yanıtlar":
+    if mode == "Ortak Açılışına Yanıtlar":
 
         north_bid = AuctionAI.generate_bid(
             hands["Kuzey"],
             []
         )
+
+        if north_bid == "PAS":
+            north_bid = "1♣"
 
         history.append({
             "player":"Kuzey",
@@ -597,11 +699,17 @@ def init_game(mode):
 
         current_turn = "Güney"
 
-    # turnuva
+    # =====================================================
+    # TOURNAMENT MODE
+    # =====================================================
 
     elif mode == "Turnuva Sekansı":
 
         current_turn = dealer
+
+    # =====================================================
+    # OPENING MODE
+    # =====================================================
 
     else:
 
@@ -628,13 +736,13 @@ def init_game(mode):
 # SESSION
 # =========================================================
 
-if "bridge_v25" not in st.session_state:
+if "bridge_v30" not in st.session_state:
 
-    st.session_state.bridge_v25 = init_game(
+    st.session_state.bridge_v30 = init_game(
         "Kendi Açılış Pratiğiniz"
     )
 
-state = st.session_state.bridge_v25
+state = st.session_state.bridge_v30
 
 # =========================================================
 # SIDEBAR
@@ -648,7 +756,7 @@ with st.sidebar:
         "Mod:",
         [
             "Kendi Açılış Pratiğiniz",
-            "Ortak Açışına Yanıtlar",
+            "Ortak Açılışına Yanıtlar",
             "Turnuva Sekansı"
         ]
     )
@@ -657,13 +765,13 @@ with st.sidebar:
 
     if mode != state["mode"]:
 
-        st.session_state.bridge_v25 = init_game(mode)
+        st.session_state.bridge_v30 = init_game(mode)
 
         st.rerun()
 
     if st.button("🔄 Yeni El"):
 
-        st.session_state.bridge_v25 = init_game(mode)
+        st.session_state.bridge_v30 = init_game(mode)
 
         st.rerun()
 
@@ -671,7 +779,7 @@ with st.sidebar:
 # TITLE
 # =========================================================
 
-st.title("🃏 TBF Briç Akademi v25.0")
+st.title("🃏 TBF Briç Akademi v30.0")
 
 # =========================================================
 # SOUTH HAND
@@ -687,10 +795,12 @@ st.write(f"### HCP: {hcp}")
 st.markdown(
     f"""
     <div class='card-box'>
+
     ♠ {' '.join(south['♠'])}<br>
     ♥ {' '.join(south['♥'])}<br>
     ♦ {' '.join(south['♦'])}<br>
     ♣ {' '.join(south['♣'])}
+
     </div>
     """,
     unsafe_allow_html=True
@@ -705,10 +815,12 @@ if state["bidding_history"]:
     st.markdown(
         f"""
         <div class='bid-history'>
+
         {' → '.join([
             f"{b['player']}:{b['bid']}"
             for b in state["bidding_history"]
         ])}
+
         </div>
         """,
         unsafe_allow_html=True
@@ -718,7 +830,7 @@ if state["bidding_history"]:
 # RESULT
 # =========================================================
 
-if state["feedback"]:
+if state["feedback"] is not None:
 
     st.markdown(
         f"""
@@ -729,19 +841,19 @@ if state["feedback"]:
         unsafe_allow_html=True
     )
 
-    # north hand reveal
-
     north = state["hands"]["Kuzey"]
 
     st.markdown(
         f"""
-        <div class='north-box'>
+        <div class='partner-box'>
+
         <b>Kuzey Eli</b><br><br>
 
         ♠ {' '.join(north['♠'])}<br>
         ♥ {' '.join(north['♥'])}<br>
         ♦ {' '.join(north['♦'])}<br>
         ♣ {' '.join(north['♣'])}
+
         </div>
         """,
         unsafe_allow_html=True
@@ -749,7 +861,7 @@ if state["feedback"]:
 
     if st.button("➡ Yeni Ele Geç"):
 
-        st.session_state.bridge_v25 = init_game(
+        st.session_state.bridge_v30 = init_game(
             state["mode"]
         )
 
@@ -767,7 +879,18 @@ if (
     not state["auction_finished"]
 ):
 
-    if state["current_turn"] != "Güney":
+    loop_guard = 0
+
+    while (
+        state["current_turn"] != "Güney"
+        and
+        not state["auction_finished"]
+    ):
+
+        loop_guard += 1
+
+        if loop_guard > 20:
+            break
 
         bot = state["current_turn"]
 
@@ -797,117 +920,127 @@ if (
 
             state["auction_finished"] = True
 
-        else:
+            break
 
-            state["current_turn"] = PLAYERS[
-                (PLAYERS.index(bot)+1)%4
-            ]
+        state["current_turn"] = PLAYERS[
+            (
+                PLAYERS.index(bot) + 1
+            ) % 4
+        ]
 
-        time.sleep(0.15)
+        time.sleep(0.08)
 
-        st.rerun()
+    st.rerun()
 
 # =========================================================
 # USER PLAY
 # =========================================================
 
-if not state["auction_finished"]:
+if (
+    not state["auction_finished"]
+    and
+    state["current_turn"] == "Güney"
+):
 
-    if state["current_turn"] == "Güney":
+    for i in range(0, len(ALL_BIDS), 3):
 
-        for i in range(0, len(ALL_BIDS), 3):
+        cols = st.columns(3)
 
-            cols = st.columns(3)
+        for j in range(3):
 
-            for j in range(3):
+            if i+j < len(ALL_BIDS):
 
-                if i+j < len(ALL_BIDS):
+                bid = ALL_BIDS[i+j]
 
-                    bid = ALL_BIDS[i+j]
-
-                    legal = (
-                        BiddingLegalityEngine
-                        .is_legal(
-                            bid,
-                            state["bidding_history"]
-                        )
-                    )
-
-                    if cols[j].button(
+                legal = (
+                    BiddingLegalityEngine
+                    .is_legal(
                         bid,
-                        disabled=not legal,
-                        key=f"{bid}_{i}_{j}"
+                        state["bidding_history"]
+                    )
+                )
+
+                if cols[j].button(
+                    bid,
+                    disabled=not legal,
+                    key=f"{bid}_{i}_{j}"
+                ):
+
+                    state["bidding_history"].append({
+                        "player":"Güney",
+                        "bid":bid
+                    })
+
+                    # =================================================
+                    # OPENING TRAINING
+                    # =================================================
+
+                    if (
+                        state["mode"]
+                        ==
+                        "Kendi Açılış Pratiğiniz"
                     ):
 
-                        state["bidding_history"].append({
-                            "player":"Güney",
-                            "bid":bid
-                        })
+                        ok, msg = (
+                            TrainingEvaluator
+                            .evaluate_opening(
+                                south,
+                                bid
+                            )
+                        )
 
-                        # MODE 1
+                        state["feedback"] = msg
 
-                        if (
-                            state["mode"]
-                            ==
-                            "Kendi Açılış Pratiğiniz"
-                        ):
+                        state["auction_finished"] = True
 
-                            ok, msg = (
-                                TrainingEvaluator
-                                .evaluate_opening(
-                                    south,
-                                    bid
-                                )
+                    # =================================================
+                    # RESPONSE TRAINING
+                    # =================================================
+
+                    elif (
+                        state["mode"]
+                        ==
+                        "Ortak Açılışına Yanıtlar"
+                    ):
+
+                        ok, msg = (
+                            TrainingEvaluator
+                            .evaluate_response(
+                                south,
+                                bid,
+                                state["bidding_history"]
+                            )
+                        )
+
+                        state["feedback"] = msg
+
+                        state["auction_finished"] = True
+
+                    # =================================================
+                    # TOURNAMENT MODE
+                    # =================================================
+
+                    else:
+
+                        result = AuctionResolver.resolve(
+                            state["bidding_history"]
+                        )
+
+                        if result:
+
+                            state["feedback"] = (
+                                result["message"]
                             )
 
-                            state["feedback"] = msg
-
                             state["auction_finished"] = True
-
-                        # MODE 2
-
-                        elif (
-                            state["mode"]
-                            ==
-                            "Ortak Açılışına Yanıtlar"
-                        ):
-
-                            ok, msg = (
-                                TrainingEvaluator
-                                .evaluate_response(
-                                    south,
-                                    bid,
-                                    state["bidding_history"]
-                                )
-                            )
-
-                            state["feedback"] = msg
-
-                            state["auction_finished"] = True
-
-                        # MODE 3
 
                         else:
 
-                            result = AuctionResolver.resolve(
-                                state["bidding_history"]
-                            )
+                            state["current_turn"] = PLAYERS[
+                                (
+                                    PLAYERS.index("Güney")
+                                    + 1
+                                ) % 4
+                            ]
 
-                            if result:
-
-                                state["feedback"] = (
-                                    result["message"]
-                                )
-
-                                state["auction_finished"] = True
-
-                            else:
-
-                                state["current_turn"] = PLAYERS[
-                                    (
-                                        PLAYERS.index("Güney")
-                                        + 1
-                                    ) % 4
-                                ]
-
-                        st.rerun()
+                    st.rerun()
