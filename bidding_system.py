@@ -152,10 +152,14 @@ def rkcb_response(ev: HandEvaluator, trump: Suit) -> tuple[str, str]:
 
 def suggest_response(opener_bid: str, opener_suit: Suit | None, ev: HandEvaluator, partner_hcp: int = 12) -> tuple[str, str]:
     hcp = ev.hcp()
-    
-    # ZON GÜCÜ DURDURMA KİLİDİ: 25+ toplam puan veya tek başına 16+ kuvvette pas pasifliği yasaklanır
     is_game_forcing = (partner_hcp + hcp >= 25) or (hcp >= 16)
     
+    # KATİ SEVİYE DOĞRULAYICI (LEVEL VALIDATOR): Masadaki son deklere 5 seviyesindeyse 4NT üretilmesi engellenir
+    if opener_bid and opener_bid[0].isdigit():
+        if int(opener_bid[0]) >= 5 and not opener_bid == "4NT":
+            if is_game_forcing:
+                return "PAS", "Masa 5. Seviyede, Kural Dışı Geriye Dönük Deklere (4NT) Bloklandı. Pas Geçilmesi Emniyetlidir."
+
     if opener_bid == "1NT": return response_to_1nt(ev)
     
     lvl = int(opener_bid[0]) if opener_bid and opener_bid[0].isdigit() else 1
@@ -182,7 +186,7 @@ def suggest_response(opener_bid: str, opener_suit: Suit | None, ev: HandEvaluato
     if opener_bid == "4NT" and opener_suit: return rkcb_response(ev, opener_suit)
     
     if is_game_forcing:
-        return _min_level_bid("NT", opener_bid) or "3NT", "Zon Gücü Kilidi — Pas Geçilemez, Oyun Değerli Dağılım"
+        return _min_level_bid("NT", opener_bid) or "3NT", "Zon Gücü Kilidi Aktif — Pas Geçilemez, Oyun Değerli Dağılım"
         
     if hcp < 6: return BID_PASS, "PAS"
     return BID_PASS, "PAS"
