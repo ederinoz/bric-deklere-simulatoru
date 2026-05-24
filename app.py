@@ -463,7 +463,7 @@ if state["step"] == "AUCTION":
         st.markdown(
             f"""
             <div class="bid-history">
-            {" -> ".join([f"{b['player']}:{b['bid']}" for b in state["bidding_history"]]}
+            {" -> ".join([f"{b['player']}:{b['bid']}" for b in state["bidding_history"] format()]) if state["bidding_history"] else ""}
             </div>
             """,
             unsafe_allow_html=True
