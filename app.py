@@ -458,12 +458,13 @@ if state["step"] == "AUCTION":
 
     st.write(f"### Sıra: {state['current_turn']}")
 
-    # BIDDING HISTORY DISPLAY
+    # BIDDING HISTORY DISPLAY (Müzayede Geçmişi Gösterimi)
     if state["bidding_history"]:
+        history_text = " -> ".join([f"{b['player']}:{b['bid']}" for b in state["bidding_history"]])
         st.markdown(
             f"""
             <div class="bid-history">
-            {" -> ".join([f"{b['player']}:{b['bid']}" for b in state["bidding_history"] format()]) if state["bidding_history"] else ""}
+            {history_text}
             </div>
             """,
             unsafe_allow_html=True
