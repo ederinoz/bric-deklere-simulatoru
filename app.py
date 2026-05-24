@@ -1,6 +1,6 @@
 # TBF Briç Akademi v13.0 — Full Stabilized Engine
 
-```python
+
 import streamlit as st
 import random
 
