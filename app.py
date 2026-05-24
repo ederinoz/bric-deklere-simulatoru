@@ -487,54 +487,49 @@ if state["step"] == "AUCTION":
                 st.rerun()
 
     # HUMAN PLAYER INTERACTION
+    # HUMAN PLAYER INTERACTION (FULL MATRIX BIDDING BOX)
     if state["current_turn"] == "Güney" and not res:
         st.write("---")
-
-        # SATIR 1: ANA AKSİYONLAR
-        r1 = st.columns(3)
         
-        if r1[0].button("PAS"):
+        # 1. Satır: PAS, KONTRA, SÜRKONTRA
+        c1, c2, c3 = st.columns(3)
+        
+        if c1.button("PAS"):
             state["bidding_history"].append({"player":"Güney", "bid":"PAS"})
             state["current_turn"] = "Batı"
             st.rerun()
 
-        # TYPE SQUASH: disabled durumunu tam Boolean olarak zorluyoruz
-        is_x_legal = bool(BiddingLegalityEngine.is_legal("X", state["bidding_history"]))
-        if r1[1].button("KONTRA", disabled=not is_x_legal):
+        # Legality kontrolü ile buton kilitleme
+        is_x = bool(BiddingLegalityEngine.is_legal("X", state["bidding_history"]))
+        if c2.button("KONTRA", disabled=not is_x):
             state["bidding_history"].append({"player":"Güney", "bid":"X"})
             state["current_turn"] = "Batı"
             st.rerun()
 
-        is_xx_legal = bool(BiddingLegalityEngine.is_legal("XX", state["bidding_history"]))
-        if r1[2].button("SUR", disabled=not is_xx_legal):
+        is_xx = bool(BiddingLegalityEngine.is_legal("XX", state["bidding_history"]))
+        if c3.button("SUR", disabled=not is_xx):
             state["bidding_history"].append({"player":"Güney", "bid":"XX"})
             state["current_turn"] = "Batı"
             st.rerun()
+            
+        st.write("### 🃏 Deklare Seçimi")
 
-        st.write("### Deklare Ver")
-
-        # SATIR 2 VE 3: GENİŞ KOMPAKT MOBİL DEKLARE BASAMAKLARI
-        bids = ["1♠", "1NT", "2♣", "2♦", "2♥", "4♠"]
-        row1 = st.columns(3)
-        row2 = st.columns(3)
-
-        first = bids[:3]
-        second = bids[3:]
-
-        for i, b in enumerate(first):
-            ok = bool(BiddingLegalityEngine.is_legal(b, state["bidding_history"]))
-            if row1[i].button(b, disabled=not ok, key=f"b1_{b}"):
-                state["bidding_history"].append({"player":"Güney", "bid":b})
-                state["current_turn"] = "Batı"
-                st.rerun()
-
-        for i, b in enumerate(second):
-            ok = bool(BiddingLegalityEngine.is_legal(b, state["bidding_history"]))
-            if row2[i].button(b, disabled=not ok, key=f"b2_{b}"):
-                state["bidding_history"].append({"player":"Güney", "bid":b})
-                state["current_turn"] = "Batı"
-                st.rerun()
-
+        # 2. Satır ve Altı: FULL MATRİS (Tüm renkler ve 1-4. seviyeler)
+        levels = ["1", "2", "3", "4"]
+        suits = ["♣", "♦", "♥", "♠", "NT"]
+        
+        for lvl in levels:
+            cols = st.columns(5) # Her seviye için 5 sütun (Renklere göre)
+            for i, suit in enumerate(suits):
+                bid_str = f"{lvl}{suit}"
+                
+                # Yasallık kontrolü (Otomatik kilitli)
+                is_ok = bool(BiddingLegalityEngine.is_legal(bid_str, state["bidding_history"]))
+                
+                if cols[i].button(bid_str, disabled=not is_ok, key=f"bbox_{bid_str}"):
+                    state["bidding_history"].append({"player":"Güney", "bid":bid_str})
+                    state["current_turn"] = "Batı"
+                    st.rerun()
     # ROBOT TURNS
     elif not res:
         bot = state["current_turn"]
