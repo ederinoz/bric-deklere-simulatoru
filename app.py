@@ -12,9 +12,8 @@ import bidding_system as bs
 st.markdown("""
     <style>
     html, body, [data-testid="stAppViewContainer"] { font-size: 15px !important; }
-    [data-testid="stAppViewContainer"] { background-color: #FAFAFA; }
     [data-testid="stMetricValue"] { font-size: 1.4rem !important; font-weight: bold; color: #1565C0; }
-    .table-title { color: #2e7d32 !important; font-size: 1.35rem !important; font-weight: 800; margin-bottom: 6px; }
+    .table-title { font-size: 1.35rem !important; font-weight: 800; margin-bottom: 6px; }
     
     .stButton>button { 
         width: 100%; border-radius: 6px; height: 3.2rem; 
@@ -22,12 +21,13 @@ st.markdown("""
         margin-bottom: 1px !important; padding: 2px 4px;
     }
     
+    /* TEMAYA DUYARLI RENK AYARLARI */
     .suit-symbol { font-size: 1.7rem !important; font-weight: 700; vertical-align: middle; }
-    .suit-ranks { font-family: monospace; font-size: 1.45rem !important; margin-left: 10px; font-weight: bold; vertical-align: middle; }
-    .hand-info-text { font-size: 1.15rem !important; font-weight: 600; color: #37474F; margin-top: 4px; }
+    .suit-ranks { font-family: monospace; font-size: 1.45rem !important; margin-left: 10px; font-weight: bold; vertical-align: middle; color: inherit; }
+    .hand-info-text { font-size: 1.15rem !important; font-weight: 600; margin-top: 4px; }
     
-    .bid-red { color: #c62828 !important; font-weight: bold; font-size: 1.1rem; }
-    .bid-black { color: #1a1a1a !important; font-weight: bold; font-size: 1.1rem; }
+    .bid-red { color: #ff4d4d !important; font-weight: bold; font-size: 1.1rem; }
+    .bid-black { color: inherit !important; font-weight: bold; font-size: 1.1rem; }
 
     @media screen and (min-width: 601px) and (max-width: 1024px) {
         html, body, [data-testid="stAppViewContainer"] { font-size: 16px !important; }
@@ -63,7 +63,8 @@ def render_responsive_hand(ev, title, is_north=False):
     st.markdown(f"{color_title}{title}")
     for suit in reversed(list(Suit)):
         cards = ev.suit_cards(suit)
-        color = "#c62828" if suit in (Suit.HEARTS, Suit.DIAMONDS) else "#1a1a1a"
+        # Siyah renk yerine, temaya göre değişen 'currentColor' (inherit) atandı
+        color = "#e53935" if suit in (Suit.HEARTS, Suit.DIAMONDS) else "inherit"
         ranks = " ".join(RANK_SYMBOLS[c.rank] for c in sorted(cards, key=lambda c: c.rank, reverse=True)) if cards else "—"
         st.markdown(f"<span class='suit-symbol' style='color:{color};'>{SUIT_SYMBOLS[suit]}</span><span class='suit-ranks'>{ranks}</span>", unsafe_allow_html=True)
     st.markdown(f"<div class='hand-info-text'>HKP: <b>{ev.hcp()}</b> | Dağılım: <b>+{ev.distribution_points()}</b> | Toplam: <b>{ev.total_points()} TP</b></div>", unsafe_allow_html=True)
