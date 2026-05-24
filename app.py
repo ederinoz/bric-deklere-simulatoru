@@ -1022,4 +1022,3 @@ elif state["step"] == "PLAY":
                 st.balloons()
 
             st.rerun()
-```
