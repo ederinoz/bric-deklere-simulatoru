@@ -1,447 +1,117 @@
-# =========================================================
-# TBF BRİÇ AKADEMİ v43.0
-# EDUCATION ENGINE + BID JUDGE SYSTEM
-# =========================================================
-
 import streamlit as st
 import random
-
-st.set_page_config(page_title="TBF Briç Akademi", layout="centered")
-
-# =========================================================
-# BASIC CONSTANTS
-# =========================================================
-
-PLAYERS = ["Kuzey", "Doğu", "Güney", "Batı"]
-
-ALL_BIDS = [
-    "PAS",
-    "1♣","1♦","1♥","1♠","1NT",
-    "2♣","2♦","2♥","2♠","2NT",
-    "3♣","3♦","3♥","3♠","3NT",
-    "4♥","4♠","4NT"
-]
-
-HCP_MAP = {
-    "A":4,
-    "K":3,
-    "Q":2,
-    "J":1
-}
-
-SUITS = ["♠","♥","♦","♣"]
-
-RANKS = ["A","K","Q","J","10","9","8","7","6","5","4","3","2"]
+import time
 
 # =========================================================
-# CSS
+# TBF BRİÇ AKADEMİ v43.0 - FULL FINAL
 # =========================================================
+
+st.set_page_config(page_title="TBF Briç Akademi v43.0", layout="centered")
 
 st.markdown("""
 <style>
-.card-box{
-    background:#f8fafc;
-    padding:14px;
-    border-radius:12px;
-    border-left:5px solid #ef4444;
-    font-family:monospace;
-    font-size:20px;
-    margin-bottom:10px;
-}
-
-.result-good{
-    background:#dcfce7;
-    color:#065f46;
-    padding:15px;
-    border-radius:12px;
-    margin-bottom:10px;
-}
-
-.result-bad{
-    background:#fee2e2;
-    color:#991b1b;
-    padding:15px;
-    border-radius:12px;
-    margin-bottom:10px;
-}
-
-.analysis-box{
-    background:#f1f5f9;
-    padding:12px;
-    border-radius:10px;
-    margin-top:10px;
-}
-
-.tree-row{
-    background:#f8fafc;
-    padding:8px;
-    border-left:4px solid #cbd5e1;
-    border-radius:6px;
-    margin-bottom:5px;
-}
+.card-box{background:#f8fafc;padding:15px;border-radius:12px;border-left:5px solid #ef4444;font-family:monospace;font-size:20px;margin-bottom:15px;}
+.bid-history{background:#1e293b;color:#e2e8f0;padding:15px;border-radius:10px;text-align:center;font-family:monospace;margin-bottom:15px;}
+.result-box{background:#dcfce7;color:#065f46;padding:15px;border-radius:12px;font-weight:bold;margin-bottom:15px;}
+.tree-row{background:#f8fafc;padding:8px;border-left:4px solid #cbd5e1;border-radius:6px;margin-bottom:5px;font-size:0.9em;}
 </style>
 """, unsafe_allow_html=True)
 
-# =========================================================
-# CARD ENGINE
-# =========================================================
+# --- ENGINE ---
+PLAYERS = ["Kuzey", "Doğu", "Güney", "Batı"]
+ALL_BIDS = ["PAS", "1♣","1♦","1♥","1♠","1NT", "2♣","2♦","2♥","2♠","2NT", "3♣","3♦","3♥","3♠","3NT", "4♥","4♠","4NT", "X", "XX"]
+SUITS = ["♠","♥","♦","♣"]
+RANKS = ["A","K","Q","J","10","9","8","7","6","5","4","3","2"]
+HCP_MAP = {"A":4, "K":3, "Q":2, "J":1}
 
-def generate_deck():
-    deck = []
-
-    for suit in SUITS:
-        for rank in RANKS:
-            deck.append(f"{rank}{suit}")
-
-    random.shuffle(deck)
-    return deck
-
-def deal_hands():
-
-    deck = generate_deck()
-
-    hands = {
-        "Kuzey":{},
-        "Doğu":{},
-        "Güney":{},
-        "Batı":{}
-    }
-
-    for p in PLAYERS:
-        for s in SUITS:
-            hands[p][s] = []
-
-    for i in range(52):
-
-        player = PLAYERS[i % 4]
-        card = deck[i]
-
-        rank = card[:-1]
-        suit = card[-1]
-
-        hands[player][suit].append(rank)
-
-    return hands
-
-# =========================================================
-# HAND EVALUATOR
-# =========================================================
+class BridgeDeck:
+    @staticmethod
+    def generate_and_deal():
+        deck = [f"{r}{s}" for s in SUITS for r in RANKS]
+        random.shuffle(deck)
+        hands = {p: {s: [] for s in SUITS} for p in PLAYERS}
+        for i, card in enumerate(deck): hands[PLAYERS[i % 4]][card[-1]].append(card[:-1])
+        return hands
 
 class HandEvaluator:
-
     @staticmethod
-    def get_hcp(hand):
-
-        total = 0
-
-        for suit in SUITS:
-            for card in hand[suit]:
-                total += HCP_MAP.get(card, 0)
-
-        return total
-
+    def get_hcp(hand): return sum(HCP_MAP.get(r, 0) for s in SUITS for r in hand[s])
     @staticmethod
-    def suit_length(hand, suit):
-        return len(hand[suit])
-
-    @staticmethod
-    def is_balanced(hand):
-
-        lengths = sorted([
-            len(hand["♠"]),
-            len(hand["♥"]),
-            len(hand["♦"]),
-            len(hand["♣"])
-        ])
-
-        return lengths in [
-            [2,3,4,4],
-            [2,3,3,5],
-            [3,3,3,4]
-        ]
-
-# =========================================================
-# BID ENGINE
-# =========================================================
+    def is_balanced(hand): return sorted([len(hand[s]) for s in SUITS]) in [[2,3,4,4], [2,3,3,5], [3,3,3,4]]
 
 class BidEngine:
-
     @staticmethod
     def opening_bid(hand):
-
-        hcp = HandEvaluator.get_hcp(hand)
-
-        sp = len(hand["♠"])
-        he = len(hand["♥"])
-        di = len(hand["♦"])
-        cl = len(hand["♣"])
-
-        balanced = HandEvaluator.is_balanced(hand)
-
-        # 1NT
-        if 15 <= hcp <= 17 and balanced:
-            return "1NT"
-
-        # 5'li majör
-        if sp >= 5 and hcp >= 12:
-            return "1♠"
-
-        if he >= 5 and hcp >= 12:
-            return "1♥"
-
-        # Minör
-        if di >= 4 and hcp >= 12:
-            return "1♦"
-
-        if cl >= 3 and hcp >= 12:
-            return "1♣"
-
+        hcp = HandEvaluator.get_hcp(hand); sp = len(hand["♠"]); he = len(hand["♥"]); balanced = HandEvaluator.is_balanced(hand)
+        if hcp <= 10 and sp >= 7: return "3♠" # Baraj
+        if 15 <= hcp <= 17 and balanced: return "1NT"
+        if hcp >= 12 and sp >= 5: return "1♠"
+        if hcp >= 12 and he >= 5: return "1♥"
+        if hcp >= 12: return "1♦" if len(hand["♦"]) >= len(hand["♣"]) else "1♣"
         return "PAS"
 
     @staticmethod
-    def response_to_major(opening_bid, hand):
-
-        hcp = HandEvaluator.get_hcp(hand)
-
-        trump = opening_bid[-1]
-
-        fit = len(hand[trump])
-
-        # 4+ destek ve 13+
-        if fit >= 4 and hcp >= 13:
-            return {
-                "best":"2NT",
-                "category":"Jacoby 2NT"
-            }
-
-        # limit raise
-        if fit >= 3 and 10 <= hcp <= 12:
-            return {
-                "best":f"3{trump}",
-                "category":"Limit Raise"
-            }
-
-        # simple raise
-        if fit >= 3 and 6 <= hcp <= 9:
-            return {
-                "best":f"2{trump}",
-                "category":"Simple Raise"
-            }
-
-        # game
-        if fit >= 5 and hcp <= 9:
-            return {
-                "best":f"4{trump}",
-                "category":"Preemptive Raise"
-            }
-
-        # NT
-        if 6 <= hcp <= 9:
-            return {
-                "best":"1NT",
-                "category":"1NT Response"
-            }
-
-        return {
-            "best":"PAS",
-            "category":"Pass"
-        }
-
-# =========================================================
-# EDUCATION ENGINE
-# =========================================================
+    def get_correct_response(opening, hand):
+        hcp = HandEvaluator.get_hcp(hand); trump = opening[-1]; fit = len(hand[trump])
+        if opening.startswith("1"):
+            if fit >= 4 and hcp >= 13: return {"best": "2NT", "category": "Jacoby 2NT"}
+            if fit >= 3 and 10 <= hcp <= 12: return {"best": f"3{trump}", "category": "Limit Raise"}
+            if fit >= 3 and 6 <= hcp <= 9: return {"best": f"2{trump}", "category": "Simple Raise"}
+            if 6 <= hcp <= 9: return {"best": "1NT", "category": "1NT Response"}
+        return {"best": "PAS", "category": "Pass"}
 
 class BidJudge:
-
     @staticmethod
     def judge(user_bid, correct_data, hand, opening):
+        if user_bid == correct_data["best"]:
+            return {"correct": True, "title": "✅ Doğru Deklere", "message": f"{user_bid} doğru seçim.", "category": correct_data["category"], "severity": "good"}
+        return {"correct": False, "title": "❌ Yanlış Deklere", "message": f"Sistem {correct_data['best']} öneriyor ({correct_data['category']}).", "category": "Eğitim", "severity": "bad"}
 
-        best = correct_data["best"]
-        category = correct_data["category"]
+# --- INIT ---
+def init_game():
+    return {"hands": BridgeDeck.generate_and_deal(), "dealer": random.choice(PLAYERS), "current_turn": None, "bidding_history": [], "auction_finished": False, "feedback": None}
 
-        hcp = HandEvaluator.get_hcp(hand)
+if "state" not in st.session_state: st.session_state.state = init_game()
+state = st.session_state.state
+if state["current_turn"] is None: state["current_turn"] = state["dealer"]
 
-        fit = len(hand[opening[-1]])
-
-        if user_bid == best:
-
-            return {
-                "correct":True,
-                "title":"✅ Doğru Deklere",
-                "message":f"{best} doğru seçim.",
-                "category":category,
-                "severity":"good"
-            }
-
-        # yakın hata
-        near = False
-
-        if best.startswith("2") and user_bid.startswith("3"):
-            near = True
-
-        if best.startswith("3") and user_bid.startswith("2"):
-            near = True
-
-        if near:
-
-            return {
-                "correct":False,
-                "title":"⚠ Yakın Hata",
-                "message":f"{user_bid} oynanabilir ama sistem tercihi {best}.",
-                "category":"Near Miss",
-                "severity":"medium"
-            }
-
-        # büyük hata
-
-        mistake = "Overbid"
-
-        if user_bid == "2NT" and best != "2NT":
-            mistake = "False Jacoby"
-
-        return {
-            "correct":False,
-            "title":"❌ Yanlış Deklere",
-            "message":f"Önerilen teklif: {best}",
-            "category":mistake,
-            "severity":"bad"
-        }
-
-# =========================================================
-# DECISION TREE
-# =========================================================
-
-def render_tree(hand, opening):
-
-    hcp = HandEvaluator.get_hcp(hand)
-
-    trump = opening[-1]
-
-    fit = len(hand[trump])
-
-    balanced = HandEvaluator.is_balanced(hand)
-
-    st.markdown("### 🌳 Karar Ağacı")
-
-    rows = [
-        ("HKP Kontrolü", f"{hcp} HKP", hcp >= 6),
-        ("Fit Kontrolü", f"{fit} kart destek", fit >= 3),
-        ("Denge Kontrolü", "Dengeli" if balanced else "Dengesiz", balanced),
-    ]
-
-    for name, detail, ok in rows:
-
-        icon = "✅" if ok else "❌"
-
-        st.markdown(
-            f'<div class="tree-row">{icon} <b>{name}</b> → {detail}</div>',
-            unsafe_allow_html=True
-        )
-
-# =========================================================
-# INIT
-# =========================================================
-
-def new_game():
-
-    hands = deal_hands()
-
-    opening = BidEngine.opening_bid(hands["Kuzey"])
-
-    return {
-        "hands":hands,
-        "opening":opening,
-        "feedback":None
-    }
-
-if "game" not in st.session_state:
-    st.session_state.game = new_game()
-
-game = st.session_state.game
-
-# =========================================================
-# UI
-# =========================================================
-
+# --- UI ---
 st.title("🃏 TBF Briç Akademi v43.0")
-
-south = game["hands"]["Güney"]
-
-opening = game["opening"]
-
-st.markdown(f"## Kuzey Açılışı: {opening}")
-
-st.write(f"### Güney Eli | HKP: {HandEvaluator.get_hcp(south)}")
+south = state["hands"]["Güney"]
+st.write(f"### Güney | HCP: {HandEvaluator.get_hcp(south)}")
 
 for suit in SUITS:
+    st.markdown(f"<div class='card-box'>{suit} {' '.join(south[suit])}</div>", unsafe_allow_html=True)
 
-    cards = " ".join(south[suit])
+if state["bidding_history"]:
+    st.markdown(f"<div class='bid-history'>{' → '.join([f\"{b['player']}:{b['bid']}\" for b in state['bidding_history']])}</div>", unsafe_allow_html=True)
 
-    st.markdown(
-        f"<div class='card-box'>{suit} {cards}</div>",
-        unsafe_allow_html=True
-    )
+if state["feedback"]:
+    fb = state["feedback"]
+    css = "result-good" if fb["severity"] == "good" else "result-bad"
+    st.markdown(f"<div class='{css}'><h3>{fb['title']}</h3><p>{fb['message']}</p></div>", unsafe_allow_html=True)
+    
+    # Karar Ağacı Görselleştirme
+    hcp = HandEvaluator.get_hcp(south)
+    fit = len(south[state["bidding_history"][0]["bid"][-1]]) if state["bidding_history"] else 0
+    for name, detail, ok in [("HKP", f"{hcp} Puan", hcp >= 6), ("Fit", f"{fit} Kart", fit >= 3)]:
+        st.markdown(f'<div class="tree-row">{"✅" if ok else "❌"} <b>{name}</b>: {detail}</div>', unsafe_allow_html=True)
 
-# =========================================================
-# FEEDBACK
-# =========================================================
-
-if game["feedback"]:
-
-    fb = game["feedback"]
-
-    if fb["severity"] == "good":
-        css = "result-good"
-    else:
-        css = "result-bad"
-
-    st.markdown(
-        f"""
-        <div class="{css}">
-        <h3>{fb["title"]}</h3>
-        <p>{fb["message"]}</p>
-        <b>Kategori:</b> {fb["category"]}
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-    render_tree(south, opening)
-
-    if st.button("➡ Yeni El"):
-
-        st.session_state.game = new_game()
-        st.rerun()
-
+    if st.button("➡ Yeni El"): st.session_state.state = init_game(); st.rerun()
     st.stop()
 
-# =========================================================
-# USER ACTION
-# =========================================================
-
-correct_data = BidEngine.response_to_major(opening, south)
-
-st.markdown("## Deklerenizi Seçin")
-
+# --- USER PLAY ---
+st.markdown("### Deklerenizi Seçin")
 for i in range(0, len(ALL_BIDS), 4):
-
     cols = st.columns(4)
-
     for j in range(4):
-
-        if i + j < len(ALL_BIDS):
-
+        if i+j < len(ALL_BIDS):
             bid = ALL_BIDS[i+j]
-
             if cols[j].button(bid):
-
-                result = BidJudge.judge(
-                    bid,
-                    correct_data,
-                    south,
-                    opening
-                )
-
-                game["feedback"] = result
-
+                # 1. Eğitim Kontrolü
+                opening = state["bidding_history"][0]["bid"] if state["bidding_history"] else ""
+                corr = BidEngine.get_correct_response(opening, south)
+                state["feedback"] = BidJudge.judge(bid, corr, south, opening)
+                state["bidding_history"].append({"player": "Güney", "bid": bid})
+                state["auction_finished"] = True
                 st.rerun()
