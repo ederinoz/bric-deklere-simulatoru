@@ -1,46 +1,83 @@
+# =========================================================
+# TBF BRİÇ AKADEMİ v9.5 - OPTIMIZED STABLE
+# Mobil + Eğitim + Saf Core Çekirdek (Tek Dosya)
+# =========================================================
+
 import streamlit as st
 import random
 
-# =========================================================
-# TBF BRİÇ CORE ENGINE v7.5 OPTIMIZED STABLE
-# =========================================================
-
 st.set_page_config(
-    page_title="TBF Briç Core Engine v7.5",
+    page_title="TBF Briç Akademi v9.5",
     layout="centered"
 )
+
+# =========================================================
+# CSS - MOBİL VE EKRAN TASARIMI
+# =========================================================
 
 st.markdown("""
 <style>
 .block-container {
-    padding-top: 1rem;
+    padding-top: 0.8rem;
     padding-bottom: 1rem;
+    padding-left: 0.7rem;
+    padding-right: 0.7rem;
 }
+
 div.stButton > button {
     width: 100%;
-    font-weight: bold;
-    border-radius: 7px;
-}
-.table-box {
-    padding: 14px;
     border-radius: 10px;
-    background-color: #0f172a;
+    font-weight: bold;
+    height: 50px;
+    font-size: 17px !important;
+}
+
+.card-box {
+    background-color: #f8fafc;
+    padding: 12px;
+    border-radius: 10px;
+    margin-bottom: 10px;
+    border-left: 5px solid #ef4444;
+}
+
+.table-box {
+    background-color: #1e293b;
     color: white;
+    padding: 12px;
+    border-radius: 10px;
     margin-bottom: 10px;
 }
-.card-box {
+
+.bid-history {
+    background: #1e293b;
+    color: white;
     padding: 10px;
-    border-radius: 8px;
-    background-color: #f8fafc;
-    color: black;
-    margin-bottom: 10px;
+    border-radius: 10px;
+    overflow-x: auto;
+    white-space: nowrap;
+    font-size: 16px;
+}
+
+.mobile-cards {
+    font-size: 21px;
+    line-height: 2.0;
     font-family: monospace;
+}
+
+@media (max-width: 768px) {
+    h1 { font-size: 2rem !important; }
+    h2 { font-size: 1.3rem !important; }
+    .mobile-cards { font-size: 22px; }
+    div.stButton > button {
+        height: 56px;
+        font-size: 18px !important;
+    }
 }
 </style>
 """, unsafe_allow_html=True)
 
 # =========================================================
-# CORE CONSTANTS
+# SABİTLER
 # =========================================================
 
 PLAYERS = ["Batı", "Kuzey", "Doğu", "Güney"]
@@ -59,110 +96,90 @@ CARD_RANK = {
 }
 
 # =========================================================
-# DECK
+# DECK (DESTE ÜRETİCİ)
 # =========================================================
 
 class BridgeDeck:
-    SUITS = ["♠", "♥", "♦", "♣"]
+    SUITS = ["♠","♥","♦","♣"]
     RANKS = ["2","3","4","5","6","7","8","9","10","J","Q","K","A"]
 
     @staticmethod
     def generate_and_deal():
-        deck = [
-            f"{s}{r}"
-            for s in BridgeDeck.SUITS
-            for r in BridgeDeck.RANKS
-        ]
+        deck = [f"{s}{r}" for s in BridgeDeck.SUITS for r in BridgeDeck.RANKS]
         random.shuffle(deck)
 
-        hands = {
-            p: {"♠":[],"♥":[],"♦":[],"♣":[]}
-            for p in PLAYERS
-        }
+        hands = {p: {"♠":[],"♥":[],"♦":[],"♣":[]} for p in PLAYERS}
 
         for idx, card in enumerate(deck):
             suit = card[0]
             rank = card[1:]
             hands[PLAYERS[idx % 4]][suit].append(rank)
 
-        rank_order = {v:i for i,v in enumerate(BridgeDeck.RANKS)}
-
         for p in PLAYERS:
             for s in BridgeDeck.SUITS:
-                hands[p][s].sort(
-                    key=lambda x: rank_order[x],
-                    reverse=True
-                )
+                hands[p][s].sort(key=lambda x: CARD_RANK[x], reverse=True)
+
         return hands
 
 # =========================================================
-# HAND EVALUATOR
+# HAND EVALUATOR (HCP)
 # =========================================================
 
 class HandEvaluator:
     @staticmethod
     def get_hcp(hand):
-        values = {"A":4, "K":3, "Q":2, "J":1}
-        hcp = 0
-        for suit in hand:
-            for card in hand[suit]:
-                hcp += values.get(card, 0)
-        return hcp
+        vals = {"A":4, "K":3, "Q":2, "J":1}
+        total = 0
+        for s in hand:
+            for c in hand[s]:
+                total += vals.get(c, 0)
+        return total
 
 # =========================================================
-# BIDDING LEGALITY ENGINE (FIXED)
+# BIDDING LEGALITY MOTORU
 # =========================================================
 
 class BiddingLegalityEngine:
     @staticmethod
-    def last_real_bid_meta(history):
-        """Son yapılan geçerli kontrat teklifini ve kimin verdiğini döner"""
-        for b in reversed(history):
-            if b["bid"] not in ["PAS", "X", "XX"]:
-                return b
-        return None
+    def last_real_bid(history):
+        bids = [b["bid"] for b in history if b["bid"] not in ["PAS","X","XX"]]
+        return bids[-1] if bids else None
 
     @staticmethod
-    def is_legal(proposed_bid, history, current_player):
-        if proposed_bid == "PAS":
+    def is_legal(proposed, history):
+        if proposed == "PAS":
             return True
 
-        last_meta = BiddingLegalityEngine.last_real_bid_meta(history)
+        last_bid = BiddingLegalityEngine.last_real_bid(history)
 
-        # AÇILIŞ DEKLARESİ KONTROLLERİ
-        if not last_meta:
-            return proposed_bid not in ["X", "XX"]
+        if not last_bid:
+            return proposed not in ["X","XX"]
 
-        # KONTRA (X) - Sadece rakibin teklifine atılabilir
-        if proposed_bid == "X":
-            if history[-1]["bid"] in ["X", "XX"]:
+        # KONTRA
+        if proposed == "X":
+            if history[-1]["bid"] in ["X","XX"]:
                 return False
-            # Ortaklık kontrolü (Rakiplerimizden biri mi açtı?)
-            opponents = ["Batı", "Doğu"] if current_player in ["Kuzey", "Güney"] else ["Kuzey", "Güney"]
-            return last_meta["player"] in opponents
+            return True
 
-        # SÜRKONTRA (XX) - Sadece ortağımızın teklifine rakip kontra attıysa atılabilir
-        if proposed_bid == "XX":
-            if not history: return False
+        # SÜRKONTRA
+        if proposed == "XX":
             return history[-1]["bid"] == "X"
 
-        # NORMAL KONTRAT ARTIRIMI YASALLIK KONTROLÜ
-        last_bid = last_meta["bid"]
-        last_level = int(last_bid[0])
-        last_suit = last_bid[1:]
+        # NORMAL DEKLARE ARTIRIMI
+        ll = int(last_bid[0])
+        ls = last_bid[1:]
+        pl = int(proposed[0])
+        ps = proposed[1:]
 
-        prop_level = int(proposed_bid[0])
-        prop_suit = proposed_bid[1:]
-
-        if prop_level > last_level:
+        if pl > ll:
             return True
-        if prop_level < last_level:
+        if pl < ll:
             return False
 
-        return SUIT_ORDER[prop_suit] > SUIT_ORDER[last_suit]
+        return SUIT_ORDER[ps] > SUIT_ORDER[ls]
 
 # =========================================================
-# AUCTION RESOLVER
+# AUCTION RESOLVER (YASAL DERLEYİCİ)
 # =========================================================
 
 class AuctionResolver:
@@ -205,8 +222,7 @@ class AuctionResolver:
                     declarer = b["player"]
                     break
 
-            decl_idx = PLAYERS.index(declarer)
-            leader = PLAYERS[(decl_idx + 1) % 4]
+            leader = PLAYERS[(PLAYERS.index(declarer)+1)%4]
             dummy = [p for p in axis if p != declarer][0]
 
             return {
@@ -220,75 +236,64 @@ class AuctionResolver:
         return None
 
 # =========================================================
-# CARD TRACKER (SYNTAX FIXED)
+# CARD TRACKER
 # =========================================================
 
 class CardTracker:
     def __init__(self):
-        self.played_cards = []
-        self.suit_counts = {"♠":0, "♥":0, "♦":0, "♣":0} # Virgül hatası düzeltildi
-        self.void_inference = {
-            p: {"♠":False, "♥":False, "♦":False, "♣":False}
-            for p in PLAYERS
-        }
+        self.suit_counts = {"♠":0, "♥":0, "♦":0, "♣":0}
+        self.void_memory = {p: {"♠":False, "♥":False, "♦":False, "♣":False} for p in PLAYERS}
 
-    def log_card(self, player, card):
-        self.played_cards.append(card)
-        suit = card[0]
-        self.suit_counts[suit] += 1
+    def log_card(self, card):
+        self.suit_counts[card[0]] += 1
 
     def analyze_void(self, player, played_suit, led_suit):
         if led_suit and played_suit != led_suit:
-            self.void_inference[player][led_suit] = True
-
-    def get_remaining(self, suit):
-        return 13 - self.suit_counts[suit]
+            self.void_memory[player][led_suit] = True
 
 # =========================================================
-# AUCTION AI
+# AUCTION AI (ROBOT DEKLARE STRATEJİSİ)
 # =========================================================
 
 class AuctionAI:
     @staticmethod
     def generate_bid(player, hand, history):
         hcp = HandEvaluator.get_hcp(hand)
-        spades = len(hand["♠"])
-        hearts = len(hand["♥"])
-        meaningful = [b for b in history if b["bid"] != "PAS"]
+        sp = len(hand["♠"])
+        he = len(hand["♥"])
+        longest = max(len(hand[s]) for s in hand)
 
-        def legal(bid):
-            if BiddingLegalityEngine.is_legal(bid, history, player):
-                return bid
-            return "PAS"
+        # 9 PUAN / 7 PARÇA KURALI ENTEGRASYONU
+        if not history:
+            if hcp < 9 and longest < 7:
+                return "PAS"
 
-        # OPENING
-        if not meaningful:
             if 15 <= hcp <= 17:
-                if spades < 5 and hearts < 5:
-                    return legal("1NT")
-            if hcp >= 12:
-                if spades >= 5: return legal("1♠")
-                if hearts >= 5: return legal("1♥")
-                if len(hand["♦"]) >= len(hand["♣"]): return legal("1♦")
-                return legal("1♣")
+                if sp < 5 and he < 5:
+                    return "1NT"
+
+            if hcp >= 12 or longest >= 7:
+                if sp >= 5: return "1♠"
+                if he >= 5: return "1♥"
+                if len(hand["♦"]) >= len(hand["♣"]): return "1♦"
+                return "1♣"
+
             return "PAS"
 
-        # RESPONSES
+        # ORTAK CEVAP MODELLEMESİ
         partner = "Batı" if player == "Doğu" else "Kuzey"
-        partner_bids = [b for b in history if b["player"] == partner]
+        p_bids = [b for b in history if b["player"] == partner]
 
-        if partner_bids:
-            pbid = partner_bids[-1]["bid"]
+        if p_bids:
+            pbid = p_bids[-1]["bid"]
 
-            # STAYMAN / TRANSFER
-            if pbid == "1NT":
-                if hearts >= 5 and hcp >= 5: return legal("2♦")
-                if spades >= 5 and hcp >= 5: return legal("2♥")
-                if ((spades == 4 or hearts == 4) and hcp >= 8): return legal("2♣")
+            if pbid == "1NT" and hcp >= 8:
+                if sp == 4 or he == 4: return "2♣"
 
-            # FIT DESTEKLERİ
-            if pbid == "1♠" and spades >= 3 and hcp >= 6: return legal("2♠")
-            if pbid == "1♥" and hearts >= 3 and hcp >= 6: return legal("2♥")
+            if pbid in ["1♠","1♥"]:
+                suit = pbid[1:]
+                if len(hand[suit]) >= 3 and hcp >= 6:
+                    return f"2{suit}"
 
         return "PAS"
 
@@ -298,42 +303,33 @@ class AuctionAI:
 
 class BridgeLogic:
     @staticmethod
-    def determine_trick_winner(trick_cards, led_suit, trump_suit):
-        winner = trick_cards[0]
-        for played in trick_cards[1:]:
-            w_suit = winner["card"][0]
-            w_rank = winner["card"][1:]
-            p_suit = played["card"][0]
-            p_rank = played["card"][1:]
+    def determine_trick_winner(cards, led, trump):
+        winner = cards[0]
+        for p in cards[1:]:
+            ws = winner["card"][0]
+            wr = winner["card"][1:]
+            ps = p["card"][0]
+            pr = p["card"][1:]
 
-            if p_suit == w_suit:
-                if CARD_RANK[p_rank] > CARD_RANK[w_rank]: winner = played
-            elif (p_suit == trump_suit and trump_suit != "NT" and w_suit != trump_suit):
-                winner = played
-            elif (p_suit == trump_suit and w_suit == trump_suit):
-                if CARD_RANK[p_rank] > CARD_RANK[w_rank]: winner = played
+            if ps == ws:
+                if CARD_RANK[pr] > CARD_RANK[wr]: winner = p
+            elif (ps == trump and trump != "NT" and ws != trump):
+                winner = p
+            elif (ps == trump and ws == trump):
+                if CARD_RANK[pr] > CARD_RANK[wr]: winner = p
         return winner
 
 # =========================================================
-# STRATEGIC AI
+# STRATEGIC AI (ROBOT OYUN ZEKASI)
 # =========================================================
 
 class StrategicAI:
     @staticmethod
-    def play_card(bot_name, hand, trick_history, trump_suit, void_memory, declarer_side):
-        # OPENING LEAD
-        if not trick_history:
-            safe_suits = ["♠","♥","♦","♣"]
-            for opp in declarer_side:
-                for s in ["♠","♥","♦","♣"]:
-                    if void_memory[opp][s] and s in safe_suits:
-                        safe_suits.remove(s)
-
-            if not safe_suits:
-                safe_suits = ["♠","♥","♦","♣"]
-
+    def play_card(hand, trick, trump):
+        # ATAK
+        if not trick:
             # TOP OF SEQUENCE
-            for s in safe_suits:
+            for s in ["♠","♥","♦","♣"]:
                 if len(hand[s]) >= 3:
                     c1 = CARD_RANK[hand[s][0]]
                     c2 = CARD_RANK[hand[s][1]]
@@ -341,150 +337,205 @@ class StrategicAI:
                     if c1-c2 == 1 and c2-c3 == 1:
                         return f"{s}{hand[s].pop(0)}"
 
-            # 4TH BEST
-            for s in safe_suits:
-                if (len(hand[s]) >= 4 and any(c in hand[s] for c in ["A","K","Q","J"])):
-                    return f"{s}{hand[s].pop(3)}"
-
-            # FALLBACK
-            for s in safe_suits:
+            # STANDART ATAK
+            for s in ["♠","♥","♦","♣"]:
                 if hand[s]: return f"{s}{hand[s].pop(-1)}"
 
+        led = trick[0]["card"][0]
+
         # FOLLOW SUIT
-        led = trick_history[0]["card"][0]
         if hand[led]:
-            partner_led = len(trick_history) == 2
-            if (partner_led and any(c in hand[led] for c in ["A","K","Q"])):
-                return f"{led}{hand[led].pop(0)}"
             return f"{led}{hand[led].pop(-1)}"
 
         # RUFF
-        if trump_suit != "NT" and hand[trump_suit]:
-            return f"{trump_suit}{hand[trump_suit].pop(-1)}"
+        if trump != "NT" and hand[trump]:
+            return f"{trump}{hand[trump].pop(-1)}"
 
         # DISCARD
         for s in ["♣","♦","♥","♠"]:
             if hand[s]: return f"{s}{hand[s].pop(-1)}"
+
         return None
 
 # =========================================================
-# SCORING
+# STATE INITIALIZATION & SAF KART FİLTRESİ
 # =========================================================
 
-class AdvancedScoring:
-    @staticmethod
-    def calculate_score(contract, tricks_won, vulnerable=False, doubled=False, redoubled=False):
-        level = int(contract[0])
-        trump = contract[1:]
-        target = level + 6
+if "bridge_v9" not in st.session_state:
+    # 9 Puan veya 7 Parça Filtresini while döngüsüyle arka planda çözüyoruz (Sonsuz Döngü Engeli)
+    while True:
+        generated_hands = BridgeDeck.generate_and_deal()
+        hcp_check = HandEvaluator.get_hcp(generated_hands["Güney"])
+        len_check = max(len(generated_hands["Güney"][s]) for s in generated_hands["Güney"])
+        if hcp_check >= 9 or len_check >= 7:
+            hands = generated_hands
+            break
 
-        # DOWN (BATIK HESAPLAYICI)
-        if tricks_won < target:
-            down = target - tricks_won
-            if doubled: penalty = 200 if vulnerable else 100
-            elif redoubled: penalty = 400 if vulnerable else 200
-            else: penalty = 100 if vulnerable else 50
-            total = penalty * down
-            return {"status":"DOWN", "score":-total, "msg":f"{down} battı | Skor: -{total}"}
-
-        # MADE (BAŞARILI KONTRAT HESAPLAYICI)
-        multiplier = 30 if trump in ["♠","♥","NT"] else 20
-        trick_score = level * multiplier
-        if trump == "NT": trick_score += 10
-
-        if doubled: trick_score *= 2
-        if redoubled: trick_score *= 4
-
-        bonus = 500 if vulnerable else 300 if trick_score >= 100 else 50
-        if level == 6: bonus += 750 if vulnerable else 500
-        if level == 7: bonus += 1500 if vulnerable else 1000
-
-        over = tricks_won - target
-        if doubled: over_score = over * (200 if vulnerable else 100)
-        elif redoubled: over_score = over * (400 if vulnerable else 200)
-        else: over_score = over * (30 if trump in ["♠","♥","NT"] else 20)
-
-        total = trick_score + bonus + over_score
-        return {"status":"MADE", "score":total, "msg":f"Kontrat yapıldı | Skor: +{total}"}
-
-# =========================================================
-# STATE INIT
-# =========================================================
-
-if "bridge_v7" not in st.session_state:
-    st.session_state.bridge_v7 = {
+    st.session_state.bridge_v9 = {
         "step":"AUCTION",
-        "hands":BridgeDeck.generate_and_deal(),
+        "hands":hands,
         "bidding_history":[],
         "trick_history":[],
         "tracker":CardTracker(),
         "contract_meta":None,
         "current_turn":"Batı",
-        "trick_count":0,
         "score_decl":0,
         "score_def":0,
-        "vulnerable":random.choice([True, False])
+        "trick_count":0,
+        "vulnerable":random.choice([True, False]),
+        "mode":"Turnuva Sekansı"
     }
 
-state = st.session_state.bridge_v7
+state = st.session_state.bridge_v9
 
 # =========================================================
-# UI MAIN RENDER
+# SIDEBAR MOD CONTROLLER
 # =========================================================
 
-st.title("🃏 TBF Briç Core Engine v7.5")
+with st.sidebar:
+    st.title("🎓 Eğitim Modları")
 
-st.sidebar.metric(
-    "Zon Durumu",
-    "ZONDA" if state["vulnerable"] else "ZONSUZ"
-)
+    mode = st.radio(
+        "Çalışma Alanı:",
+        [
+            "Kendi Açılış Pratiğiniz",
+            "Ortak Açışına Yanıtlar",
+            "Turnuva Sekansı"
+        ]
+    )
 
-# --- AUCTION STAGE ---
+    if mode != state["mode"]:
+        state["mode"] = mode
+        state["bidding_history"] = []
+        state["trick_history"] = []
+        state["step"] = "AUCTION"
+
+        if mode == "Kendi Açılış Pratiğiniz":
+            state["current_turn"] = "Güney"
+        elif mode == "Ortak Açışına Yanıtlar":
+            state["bidding_history"] = [{"player":"Kuzey", "bid":"1NT"}]
+            state["current_turn"] = "Güney"
+        else:
+            state["current_turn"] = "Batı"
+        st.rerun()
+
+    if st.button("🔄 Yeni El"):
+        st.session_state.clear()
+        st.rerun()
+
+    st.markdown("---")
+    st.metric("Zon", "ZONDA" if state["vulnerable"] else "ZONSUZ")
+
+# =========================================================
+# MAIN RENDER
+# =========================================================
+
+st.title("🃏 TBF Briç Akademi v9.5")
+south = state["hands"]["Güney"]
+hcp_south = HandEvaluator.get_hcp(south)
+
+# =========================================================
+# AUCTION STAGE
+# =========================================================
+
 if state["step"] == "AUCTION":
     st.subheader("💬 Müzayede")
-    south = state["hands"]["Güney"]
 
     st.markdown("<div class='card-box'>", unsafe_allow_html=True)
-    st.write(f"Güney HCP: {HandEvaluator.get_hcp(south)}")
-    for s,c in south.items():
-        st.write(f"{s}: {' '.join(c)}")
+    st.write(f"**Güney Eliniz (HCP: {hcp_south})**")
+    st.markdown(
+        f"""
+        <div class="mobile-cards">
+        ♠ {' '.join(south['♠'])}<br>
+        ♥ {' '.join(south['♥'])}<br>
+        ♦ {' '.join(south['♦'])}<br>
+        ♣ {' '.join(south['♣'])}
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
     st.markdown("</div>", unsafe_allow_html=True)
 
-    st.write(f"Sıra: {state['current_turn']}")
+    st.write(f"### Sıra: {state['current_turn']}")
 
+    # BIDDING HISTORY DISPLAY
     if state["bidding_history"]:
-        st.code(" -> ".join([f"{b['player']}:{b['bid']}" for b in state["bidding_history"]]))
+        st.markdown(
+            f"""
+            <div class="bid-history">
+            {" -> ".join([f"{b['player']}:{b['bid']}" for b in state["bidding_history"]]}
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
 
-    resolution = AuctionResolver.resolve(state["bidding_history"])
+    res = AuctionResolver.resolve(state["bidding_history"])
 
-    if resolution:
-        if resolution == "PASS_OUT":
+    if res:
+        if res == "PASS_OUT":
             st.warning("Pas geçildi.")
-            if st.button("Yeni El"):
+            if st.button("Yeni Board"):
                 st.session_state.clear()
                 st.rerun()
         else:
-            state["contract_meta"] = resolution
-            st.success(f"Kontrat: {resolution['contract']} | Deklaran: {resolution['declarer']}")
-            if st.button("Oyuna Geç"):
+            state["contract_meta"] = res
+            st.success(f"Kontrat: {res['contract']} | Deklaran: {res['declarer']}")
+            if st.button("Oyuna Başla"):
                 state["step"] = "PLAY"
-                state["current_turn"] = resolution["leader"]
+                state["current_turn"] = res["leader"]
                 st.rerun()
 
-    # HUMAN ACTIONS
-    if state["current_turn"] == "Güney" and not resolution:
-        bids = ["PAS", "1♠", "1NT", "2♣", "2♦", "2♥", "4♠"]
-        cols = st.columns(len(bids))
+    # HUMAN PLAYER INTERACTION
+    if state["current_turn"] == "Güney" and not res:
+        st.write("---")
 
-        for idx,bid in enumerate(bids):
-            legal = BiddingLegalityEngine.is_legal(bid, state["bidding_history"], "Güney")
-            if cols[idx].button(bid, disabled=not legal, key=f"bid_{bid}"):
-                state["bidding_history"].append({"player":"Güney", "bid":bid})
+        # SATIR 1: ANA AKSİYONLAR
+        r1 = st.columns(3)
+        
+        if r1[0].button("PAS"):
+            state["bidding_history"].append({"player":"Güney", "bid":"PAS"})
+            state["current_turn"] = "Batı"
+            st.rerun()
+
+        # TYPE SQUASH: disabled durumunu tam Boolean olarak zorluyoruz
+        is_x_legal = bool(BiddingLegalityEngine.is_legal("X", state["bidding_history"]))
+        if r1[1].button("KONTRA", disabled=not is_x_legal):
+            state["bidding_history"].append({"player":"Güney", "bid":"X"})
+            state["current_turn"] = "Batı"
+            st.rerun()
+
+        is_xx_legal = bool(BiddingLegalityEngine.is_legal("XX", state["bidding_history"]))
+        if r1[2].button("SUR", disabled=not is_xx_legal):
+            state["bidding_history"].append({"player":"Güney", "bid":"XX"})
+            state["current_turn"] = "Batı"
+            st.rerun()
+
+        st.write("### Deklare Ver")
+
+        # SATIR 2 VE 3: GENİŞ KOMPAKT MOBİL DEKLARE BASAMAKLARI
+        bids = ["1♠", "1NT", "2♣", "2♦", "2♥", "4♠"]
+        row1 = st.columns(3)
+        row2 = st.columns(3)
+
+        first = bids[:3]
+        second = bids[3:]
+
+        for i, b in enumerate(first):
+            ok = bool(BiddingLegalityEngine.is_legal(b, state["bidding_history"]))
+            if row1[i].button(b, disabled=not ok, key=f"b1_{b}"):
+                state["bidding_history"].append({"player":"Güney", "bid":b})
                 state["current_turn"] = "Batı"
                 st.rerun()
 
-    # BOT ACTIONS
-    elif not resolution:
+        for i, b in enumerate(second):
+            ok = bool(BiddingLegalityEngine.is_legal(b, state["bidding_history"]))
+            if row2[i].button(b, disabled=not ok, key=f"b2_{b}"):
+                state["bidding_history"].append({"player":"Güney", "bid":b})
+                state["current_turn"] = "Batı"
+                st.rerun()
+
+    # ROBOT TURNS
+    elif not res:
         bot = state["current_turn"]
         bid = AuctionAI.generate_bid(bot, state["hands"][bot], state["bidding_history"])
         state["bidding_history"].append({"player":bot, "bid":bid})
@@ -492,89 +543,99 @@ if state["step"] == "AUCTION":
         state["current_turn"] = PLAYERS[(idx+1)%4]
         st.rerun()
 
-# --- PLAY STAGE ---
+# =========================================================
+# PLAY STAGE
+# =========================================================
+
 elif state["step"] == "PLAY":
     meta = state["contract_meta"]
     trump = meta["contract"][1:] if meta["contract"][1:] in ["♠","♥","♦","♣"] else "NT"
-    declarer_side = ["Güney","Kuzey"] if meta["declarer"] in ["Güney","Kuzey"] else ["Batı","Doğu"]
+    decl_side = ["Güney","Kuzey"] if meta["declarer"] in ["Güney","Kuzey"] else ["Batı","Doğu"]
 
-    st.subheader(f"🎴 Oyun | Kontrat: {meta['contract']}")
+    st.subheader(f"🎴 Oyun | {meta['contract']}")
 
-    c1,c2 = st.columns(2)
-    c1.metric("Deklaran Lövesi", state["score_decl"])
-    c2.metric("Defans Lövesi", state["score_def"])
+    c1, c2 = st.columns(2)
+    c1.metric("Biz", state["score_decl"])
+    c2.metric("Onlar", state["score_def"])
 
-    with st.sidebar.expander("🧠 Inference Memory", expanded=True):
-        for s in ["♠","♥","♦","♣"]:
-            st.write(f"{s} kalan: {state['tracker'].get_remaining(s)}")
-        st.markdown("---")
-        for p in PLAYERS:
-            voids = [s for s,v in state["tracker"].void_inference[p].items() if v]
-            if voids: st.error(f"{p}: {' '.join(voids)} VOID")
-
-    st.write(f"Sıra: {state['current_turn']}")
+    # MASADAKİ CANLI DURUM
     st.markdown("<div class='table-box'>", unsafe_allow_html=True)
-
     if state["trick_history"]:
-        cols = st.columns(len(state["trick_history"]))
-        for idx,p in enumerate(state["trick_history"]):
-            cols[idx].markdown(f"**{p['player']}**\n\n`{p['card']}`")
+        cols = st.columns(4)
+        for i, p in enumerate(state["trick_history"]):
+            cols[i].write(f"{p['player']}\n{p['card']}")
     else:
-        st.write("Yeni löve.")
+        st.write("Yeni löve")
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # DUMMY CARDS DISPLAY
-    st.success(f"Yer ({meta['dummy']})")
-    for s,cards in state["hands"][meta["dummy"]].items():
-        st.write(f"{s}: {' '.join(cards)}")
+    # DUMMY DISPLAY
+    with st.expander(f"Yer Kartları ({meta['dummy']})", expanded=True):
+        dhand = state["hands"][meta["dummy"]]
+        st.markdown(
+            f"""
+            <div class="mobile-cards">
+            ♠ {' '.join(dhand['♠'])}<br>
+            ♥ {' '.join(dhand['♥'])}<br>
+            ♦ {' '.join(dhand['♦'])}<br>
+            ♣ {' '.join(dhand['♣'])}
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
 
-    # ROBOT TURNS
+    # BOT PLAY ACTIONS
     is_bot = state["current_turn"] not in ["Güney", meta["dummy"]]
+
     if is_bot:
-        bot = state["current_turn"]
-        card = StrategicAI.play_card(bot, state["hands"][bot], state["trick_history"], trump, state["tracker"].void_inference, declarer_side)
+        card = StrategicAI.play_card(state["hands"][state["current_turn"]], state["trick_history"], trump)
         if card:
             led = state["trick_history"][0]["card"][0] if state["trick_history"] else None
-            state["tracker"].analyze_void(bot, card[0], led)
-            state["tracker"].log_card(bot, card)
-            state["trick_history"].append({"player":bot, "card":card})
-            
-            idx = PLAYERS.index(bot)
-            state["current_turn"] = PLAYERS[(idx+1)%4]
+            state["tracker"].analyze_void(state["current_turn"], card[0], led)
+            state["tracker"].log_card(card)
+
+            state["trick_history"].append({"player":state["current_turn"], "card":card})
+            state["current_turn"] = PLAYERS[(PLAYERS.index(state["current_turn"])+1)%4]
             st.rerun()
 
-    # HUMAN / DUMMY TURNS
+    # HUMAN VEYA DUMMY KART OYNATMA ALANI
     else:
         active = state["current_turn"]
         hand = state["hands"][active]
         led = state["trick_history"][0]["card"][0] if state["trick_history"] else None
-        has_led = led and any(hand[led])
+        
+        # TYPE SQUASH: bool zorlaması ile Streamlit çökme riskini tamamen sıfırlıyoruz
+        has_led = bool(led and any(hand.get(led, [])))
 
-        for suit,cards in hand.items():
+        st.write(f"### Sıra: {active}")
+
+        for s, cards in hand.items():
             if cards:
-                cols = st.columns([1]+[1]*len(cards))
-                cols[0].write(suit)
-                for idx,val in enumerate(cards):
-                    disabled = has_led and suit != led
-                    if cols[idx+1].button(val, key=f"{active}_{suit}_{val}", disabled=disabled):
-                        hand[suit].remove(val)
-                        state["tracker"].analyze_void(active, suit, led)
-                        state["tracker"].log_card(active, f"{suit}{val}")
-                        state["trick_history"].append({"player":active, "card": f"{suit}{val}"})
-                        
-                        idxp = PLAYERS.index(active)
-                        state["current_turn"] = PLAYERS[(idxp+1)%4]
+                st.write(f"### {s} {' '.join(cards)}")
+                cols = st.columns(min(len(cards), 4))
+
+                for i, val in enumerate(cards):
+                    disabled_status = bool(has_led and s != led)
+                    if cols[i % 4].button(val, key=f"{active}_{s}_{val}", disabled=disabled_status):
+                        hand[s].remove(val)
+                        state["tracker"].analyze_void(active, s, led)
+                        state["tracker"].log_card(f"{s}{val}")
+
+                        state["trick_history"].append({"player":active, "card":f"{s}{val}"})
+                        state["current_turn"] = PLAYERS[(PLAYERS.index(active)+1)%4]
                         st.rerun()
 
-    # TRICK RESOLUTION WINDOW
+    # TRICK RESOLUTION
     if len(state["trick_history"]) == 4:
-        led_suit = state["trick_history"][0]["card"][0]
-        winner_play = BridgeLogic.determine_trick_winner(state["trick_history"], led_suit, trump)
-        winner = winner_play["player"]
+        winner = BridgeLogic.determine_trick_winner(
+            state["trick_history"],
+            state["trick_history"][0]["card"][0],
+            trump
+        )["player"]
 
-        st.success(f"Löveyi alan: {winner} ({winner_play['card']})")
+        st.success(f"Löveyi alan: {winner}")
+
         if st.button("Löveyi Topla"):
-            if winner in declarer_side: state["score_decl"] += 1
+            if winner in decl_side: state["score_decl"] += 1
             else: state["score_def"] += 1
 
             state["trick_history"] = []
@@ -585,18 +646,14 @@ elif state["step"] == "PLAY":
                 state["step"] = "SCORING"
             st.rerun()
 
-# --- SCORING STAGE ---
+# =========================================================
+# SCORING STAGE
+# =========================================================
+
 elif state["step"] == "SCORING":
-    st.subheader("📊 Skor")
-    meta = state["contract_meta"]
-    score = AdvancedScoring.calculate_score(meta["contract"], state["score_decl"], vulnerable=state["vulnerable"], doubled=meta["is_doubled"], redoubled=meta["is_redoubled"])
-
-    if score["status"] == "MADE":
-        st.success(score["msg"])
-        st.balloons()
-    else:
-        st.error(score["msg"])
-
-    if st.button("Yeni Board"):
+    st.subheader("📊 Board Sonu")
+    st.success(f"Biz: {state['score_decl']} | Onlar: {state['score_def']}")
+    
+    if st.button("🔄 Yeni Board"):
         st.session_state.clear()
         st.rerun()
