@@ -12,6 +12,7 @@ import bidding_system as bs
 st.markdown("""
     <style>
     html, body, [data-testid="stAppViewContainer"] { font-size: 15px !important; }
+    [data-testid="stAppViewContainer"] { background-color: #FAFAFA; }
     [data-testid="stMetricValue"] { font-size: 1.4rem !important; font-weight: bold; color: #1565C0; }
     .table-title { color: #2e7d32 !important; font-size: 1.35rem !important; font-weight: 800; margin-bottom: 6px; }
     
@@ -87,12 +88,19 @@ def valid_bids_above(last_bid: str | None) -> list[str]:
         return [bs.BID_PASS, bs.BID_DBL] + order[idx + 1:]
     except ValueError: return [bs.BID_PASS, bs.BID_DBL] + order[:]
 
-def is_auction_over(bids: list) -> bool:
+def is_auction_over_strict(bids: list) -> bool:
+    """KESİN İHALE KAPANMA SAYACI: Listenin sonuna bakmaksızın, art arda 3 gerçek PAS girildiğinde ihaleyi bitirir"""
     if len(bids) < 3: return False
-    last_three = [b for _, b, _ in bids[-3:]]
-    if all(b == bs.BID_PASS for b in last_three):
-        if any(b != bs.BID_PASS for _, b, _ in bids): return True
-    if len(bids) >= 4 and all(b == bs.BID_PASS for _, b, _ in bids[-4:]): return True
+    if len(bids) == 4 and all(b == bs.BID_PASS for _, b, _ in bids): return True
+    
+    # Sondan geriye doğru ardışık PAS sayımı yapar
+    pass_streak = 0
+    for _, b, _ in reversed(bids):
+        if b == bs.BID_PASS:
+            pass_streak += 1
+            if pass_streak >= 3: return True
+        else:
+            break
     return False
 
 def last_real_bid_and_pos(bids: list) -> tuple[str | None, int | None]:
@@ -108,7 +116,9 @@ def calculate_correct_live_bid(bids: list, user_hand_ev: HandEvaluator) -> tuple
         return bs.opening_bid(user_hand_ev, seat=3)
         
     if last_real_pos == 0:
-        return bs.suggest_response(last_real, extract_suit(last_real), user_hand_ev, 12)
+        # DİNAMİK ORTAK HAFİZASI: Kuzey'in gerçek el analiz puanı motora gönderilir
+        n_ev = HandEvaluator(st.session_state["hands"][0])
+        return bs.suggest_response(last_real, extract_suit(last_real), user_hand_ev, partner_hcp=n_ev.hcp())
         
     if bids and bids[-1][1] == bs.BID_DBL and bids[-1][0] == 0:
         return bs.respond_to_double(last_real, user_hand_ev)
@@ -123,14 +133,20 @@ def calculate_correct_live_bid(bids: list, user_hand_ev: HandEvaluator) -> tuple
     return bs.overcall_or_double(user_hand_ev, last_real, partner_passed=partner_passed)
 
 def robot_bid_for_pos(pos: int, hands: list, bids: list) -> tuple[str, str]:
+    """KIMLIK KILITI ENTEGRASYONU: Robotun deklere verirken rakip ve ortak ayrımını kesin yapmasını sağlar"""
     ev = HandEvaluator(hands[pos])
     partner = (pos + 2) % 4
     seat = len(bids) + 1
     last_real, last_real_pos = last_real_bid_and_pos(bids)
     
-    # EMİR FİLTRESİ: Ortak (Güney) açış yaptıysa ve robotta 6+ HKP varsa PAS geçmesi engellenir
-    if partner == 2 and last_real is not None and ev.hcp() >= 6:
-        bid, expl = bs.suggest_response(last_real, extract_suit(last_real), ev, 12)
+    # KIMLIK VE ORTAK KONTROLÜ: Eğer 1NT açan adam rakipse, Stayman veya Transfer kural bloklarını tetikleme!
+    if last_real == "1NT" and last_real_pos != partner:
+        partner_passed = any(b == bs.BID_PASS for p, b, _ in bids if p == partner)
+        return bs.overcall_or_double(ev, last_real, partner_passed=partner_passed)
+
+    if partner == 2 and last_real is not None:
+        s_ev = HandEvaluator(hands[2])
+        bid, expl = bs.suggest_response(last_real, extract_suit(last_real), ev, partner_hcp=s_ev.hcp())
         if bid != bs.BID_PASS: return bid, expl
 
     if last_real is None:
@@ -140,7 +156,8 @@ def robot_bid_for_pos(pos: int, hands: list, bids: list) -> tuple[str, str]:
         
     if last_real_pos == partner:
         if last_real == bs.BID_DBL: return bs.respond_to_double(last_real, ev)
-        return bs.suggest_response(last_real, extract_suit(last_real), ev, 12)
+        p_ev = HandEvaluator(hands[partner])
+        return bs.suggest_response(last_real, extract_suit(last_real), ev, partner_hcp=p_ev.hcp())
         
     partner_passed = any(b == bs.BID_PASS for p, b, _ in bids if p == partner)
     return bs.overcall_or_double(ev, last_real, partner_passed=partner_passed)
@@ -148,7 +165,7 @@ def robot_bid_for_pos(pos: int, hands: list, bids: list) -> tuple[str, str]:
 def advance_live_robots():
     hands, bids = st.session_state["hands"], st.session_state["live_bids"]
     for _ in range(12):
-        if is_auction_over(bids):
+        if is_auction_over_strict(bids):
             st.session_state["live_done"] = True
             return
         turn = st.session_state["live_turn"]
@@ -162,7 +179,7 @@ def advance_live_robots():
         bids.append((turn, bid, expl))
         st.session_state["live_turn"] = (turn + 1) % 4
         
-    if is_auction_over(bids): st.session_state["live_done"] = True
+    if is_auction_over_strict(bids): st.session_state["live_done"] = True
 
 def submit_live_bid(user_bid: str):
     hands, bids = st.session_state["hands"], st.session_state["live_bids"]
@@ -181,9 +198,20 @@ def submit_live_bid(user_bid: str):
     advance_live_robots()
 
 def new_hand_for_mode(mode: str):
-    for _ in range(1000):
+    """GÜNEY MİNİMMUM 10 HKP KANUNU FİLTRESİ: Zaman kaybettiren çöp elleri daha üretirken eler"""
+    for _ in range(2000):
         hands = deal_hands()
+        s_ev = HandEvaluator(hands[2])
         n_ev = HandEvaluator(hands[0])
+        
+        # BARAJ AÇIŞ İSTİSNASI: Herhangi bir renk tam 7 kart ise el korunur
+        has_7_card_suit = any(s_ev.length(suit) >= 7 for suit in Suit)
+        
+        # Güney eli kuralları (Mod 1 ve Mod 2 için geçerli)
+        if mode in ("opening", "response"):
+            if not has_7_card_suit and s_ev.hcp() < 10:
+                continue  # 10 puandan düşük çöp el ise kartı çöpe at, yeniden dağıt
+                
         nb, _ = bs.opening_bid(n_ev, seat=1)
         if mode == "opening": return hands
         if mode == "response" and nb != bs.BID_PASS: return hands
@@ -219,7 +247,8 @@ def submit_bid(user_bid: str):
         if st.session_state["rkcb_active"]:
             correct, explanation = bs.rkcb_response(s_ev, st.session_state["trump"] or Suit.SPADES)
         else:
-            correct, explanation = bs.suggest_response(st.session_state["north_bid"], extract_suit(st.session_state["north_bid"]), s_ev, n_ev.hcp())
+            # DİNAMİK ORTAK HAFİZASI ENTEGRASYONU: Karar motoruna ortağın gerçek puanı gönderilir
+            correct, explanation = bs.suggest_response(st.session_state["north_bid"], extract_suit(st.session_state["north_bid"]), s_ev, partner_hcp=n_ev.hcp())
             if user_bid == "4NT" and correct == "4NT":
                 st.session_state["rkcb_active"] = True
                 st.session_state["trump"] = extract_suit(st.session_state["north_bid"]) or Suit.SPADES
@@ -263,6 +292,9 @@ if st.session_state["hands"] is None:
 hands = st.session_state["hands"]
 s_ev, n_ev = HandEvaluator(hands[2]), HandEvaluator(hands[0])
 
+# ───────────────────────────────────────────────
+# MOD 3: CANLI MASA SEKANSI
+# ───────────────────────────────────────────────
 if mode == "live":
     st.subheader("Canlı Masa Turnuva Simülasyonu")
     bids, live_done = st.session_state["live_bids"], st.session_state["live_done"]
@@ -270,7 +302,7 @@ if mode == "live":
     lc1, lc2 = st.columns([1, 1])
     with lc1: 
         render_responsive_hand(s_ev, "🔴 Sizin Kartlarınız (Güney)")
-        if live_done:
+        if is_auction_over_strict(bids) or live_done:
             st.divider()
             render_responsive_hand(n_ev, "Kuzey (Ortağınızın Kartları)", is_north=True)
             
@@ -286,7 +318,7 @@ if mode == "live":
         else: 
             st.error(f"❌ TBF Önerisi: {st.session_state['live_feedback_correct']} | {st.session_state['live_feedback']}")
         
-    if not live_done:
+    if not is_auction_over_strict(bids) and not live_done:
         st.markdown("---")
         st.markdown("<div class='table-title'>Deklerenizi Masaya Atın:</div>", unsafe_allow_html=True)
         
@@ -310,6 +342,9 @@ if mode == "live":
         if st.button("Sonraki Masaya Geç ➡️", type="primary", use_container_width=True): deal_new_hand(); st.rerun()
     st.stop()
 
+# ───────────────────────────────────────────────
+# MOD 1 & 2: STANDART ANTRENMAN EKRANI
+# ───────────────────────────────────────────────
 sc1, sc2 = st.columns([1, 1])
 with sc1:
     render_responsive_hand(s_ev, "🔴 Sizin Kartlarınız (Güney)")
@@ -320,10 +355,8 @@ with sc2:
         seat_text = {1: "1. Koltuk (Dağıtıcı Sizin)", 2: "2. Koltuk", 3: "3. Koltuk (Ortak Pas Geçti)"}
         st.info(f"Oturduğunuz Konum: **{seat_text[st.session_state['seat']]}**")
     elif mode == "response":
-        if st.session_state["rkcb_active"]:
-            st.warning(f"Koz Anlaşması: **{SUIT_NAMES_TR[st.session_state['trump']]}** | Ortak **4NT** Sordu.")
-        else:
-            st.warning(f"🔵 Kuzey (Ortak) Sistem Açışı Yaptı: **{st.session_state['north_bid']}**")
+        st.warning(f"🔵 Kuzey (Ortak) Gerçek Sistem Açışı Yaptı: **{st.session_state['north_bid']}**")
+        st.info(f"💡 Arka Plan Bilgisi: Kuzey'in gerçek gücü **{n_ev.hcp()} HKP**")
 
 st.divider()
 
@@ -341,8 +374,14 @@ else:
         buttons = ["5♣", "5♦", "5♥", "5♠"]
     else:
         buttons = [bs.BID_PASS, bs.BID_DBL]
+        last_real_or_north = st.session_state["north_bid"] if mode == "response" else None
+        allowed_bids = valid_bids_above(last_real_or_north)
+        
+        base_buttons = [bs.BID_PASS, bs.BID_DBL]
         for lvl in range(1, 6):
-            for sym in ["♣", "♦", "♥", "♠", "NT"]: buttons.append(f"{lvl}{sym}")
+            for sym in ["♣", "♦", "♥", "♠", "NT"]: base_buttons.append(f"{lvl}{sym}")
+            
+        buttons = [b for b in base_buttons if b in (bs.BID_PASS, bs.BID_DBL) or b in allowed_bids]
         
     cols = st.columns(4)
     for idx, b in enumerate(buttons):
