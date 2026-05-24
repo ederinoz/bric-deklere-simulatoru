@@ -1,14 +1,13 @@
 import streamlit as st
 import random
-import time
 
 # =========================================================
-# TBF BRİÇ AKADEMİ v30.0
-# FULL REBUILD STABLE EDITION
+# TBF BRİÇ AKADEMİ v31.0
+# CLEAN STABLE EDITION
 # =========================================================
 
 st.set_page_config(
-    page_title="TBF Briç Akademi v30.0",
+    page_title="TBF Briç Akademi v31.0",
     layout="centered"
 )
 
@@ -93,19 +92,9 @@ SUIT_ORDER = {
 }
 
 CARD_RANK = {
-    '2':2,
-    '3':3,
-    '4':4,
-    '5':5,
-    '6':6,
-    '7':7,
-    '8':8,
-    '9':9,
-    '10':10,
-    'J':11,
-    'Q':12,
-    'K':13,
-    'A':14
+    '2':2,'3':3,'4':4,'5':5,'6':6,
+    '7':7,'8':8,'9':9,'10':10,
+    'J':11,'Q':12,'K':13,'A':14
 }
 
 ALL_BIDS = [
@@ -126,8 +115,7 @@ ALL_BIDS = [
 
     "7♣","7♦","7♥","7♠","7NT",
 
-    "X",
-    "XX"
+    "X","XX"
 ]
 
 # =========================================================
@@ -285,7 +273,7 @@ class BiddingLegalityEngine:
         )
 
 # =========================================================
-# AI ENGINE
+# AI
 # =========================================================
 
 class AuctionAI:
@@ -305,14 +293,14 @@ class AuctionAI:
         candidates = []
 
         # =====================================================
-        # RESPONSE LOGIC
+        # RESPONSES
         # =====================================================
 
         if history:
 
             partner_bid = history[-1]["bid"]
 
-            # 1NT Stayman
+            # Stayman
 
             if partner_bid == "1NT":
 
@@ -349,7 +337,7 @@ class AuctionAI:
                         candidates.append("4♥")
 
         # =====================================================
-        # OPENING LOGIC
+        # OPENINGS
         # =====================================================
 
         if (
@@ -373,10 +361,6 @@ class AuctionAI:
 
         candidates.append("PAS")
 
-        # =====================================================
-        # LEGAL FILTER
-        # =====================================================
-
         for bid in candidates:
 
             if BiddingLegalityEngine.is_legal(
@@ -388,7 +372,7 @@ class AuctionAI:
         return "PAS"
 
 # =========================================================
-# AUCTION RESOLVER
+# RESOLVER
 # =========================================================
 
 class AuctionResolver:
@@ -399,7 +383,7 @@ class AuctionResolver:
         if len(history) < 4:
             return None
 
-        # PASS OUT
+        # pass out
 
         if all(
             h["bid"] == "PAS"
@@ -411,7 +395,7 @@ class AuctionResolver:
                     "Tüm oyuncular PAS dedi. El pas geçti."
             }
 
-        # CONTRACT
+        # contract
 
         last_three = history[-3:]
 
@@ -461,8 +445,6 @@ class TrainingEvaluator:
 
         balanced = HandEvaluator.is_balanced(hand)
 
-        # weak hands
-
         if hcp < 12:
 
             if bid != "PAS":
@@ -476,8 +458,6 @@ class TrainingEvaluator:
                 True,
                 "✅ Doğru PAS."
             )
-
-        # 1NT
 
         if (
             15 <= hcp <= 17
@@ -496,8 +476,6 @@ class TrainingEvaluator:
                 "✅ Doğru 1NT açılışı."
             )
 
-        # 1♠
-
         if sp >= 5:
 
             if bid != "1♠":
@@ -511,8 +489,6 @@ class TrainingEvaluator:
                 True,
                 "✅ Doğru majör açılışı."
             )
-
-        # 1♥
 
         if he >= 5:
 
@@ -558,7 +534,7 @@ class TrainingEvaluator:
             if h["player"] == "Kuzey"
         )
 
-        # 1NT response
+        # Stayman
 
         if partner_bid == "1NT":
 
@@ -632,7 +608,7 @@ class TrainingEvaluator:
         )
 
 # =========================================================
-# INIT GAME
+# INIT
 # =========================================================
 
 def init_game(mode):
@@ -650,8 +626,6 @@ def init_game(mode):
             for s in hands["Güney"]
         )
 
-        # opening training filter
-
         if (
             mode == "Kendi Açılış Pratiğiniz"
             and
@@ -660,8 +634,6 @@ def init_game(mode):
             longest < 7
         ):
             continue
-
-        # response mode north opening filter
 
         if mode == "Ortak Açılışına Yanıtlar":
 
@@ -736,13 +708,13 @@ def init_game(mode):
 # SESSION
 # =========================================================
 
-if "bridge_v30" not in st.session_state:
+if "bridge_v31" not in st.session_state:
 
-    st.session_state.bridge_v30 = init_game(
+    st.session_state.bridge_v31 = init_game(
         "Kendi Açılış Pratiğiniz"
     )
 
-state = st.session_state.bridge_v30
+state = st.session_state.bridge_v31
 
 # =========================================================
 # SIDEBAR
@@ -765,13 +737,13 @@ with st.sidebar:
 
     if mode != state["mode"]:
 
-        st.session_state.bridge_v30 = init_game(mode)
+        st.session_state.bridge_v31 = init_game(mode)
 
         st.rerun()
 
     if st.button("🔄 Yeni El"):
 
-        st.session_state.bridge_v30 = init_game(mode)
+        st.session_state.bridge_v31 = init_game(mode)
 
         st.rerun()
 
@@ -779,7 +751,7 @@ with st.sidebar:
 # TITLE
 # =========================================================
 
-st.title("🃏 TBF Briç Akademi v30.0")
+st.title("🃏 TBF Briç Akademi v31.0")
 
 # =========================================================
 # SOUTH HAND
@@ -861,7 +833,7 @@ if state["feedback"] is not None:
 
     if st.button("➡ Yeni Ele Geç"):
 
-        st.session_state.bridge_v30 = init_game(
+        st.session_state.bridge_v31 = init_game(
             state["mode"]
         )
 
@@ -879,58 +851,62 @@ if (
     not state["auction_finished"]
 ):
 
-    loop_guard = 0
+    if state["current_turn"] != "Güney":
 
-    while (
-        state["current_turn"] != "Güney"
-        and
-        not state["auction_finished"]
-    ):
+        loop_guard = 0
+        changed = False
 
-        loop_guard += 1
-
-        if loop_guard > 20:
-            break
-
-        bot = state["current_turn"]
-
-        bid = AuctionAI.generate_bid(
-            state["hands"][bot],
-            state["bidding_history"]
-        )
-
-        if not BiddingLegalityEngine.is_legal(
-            bid,
-            state["bidding_history"]
+        while (
+            state["current_turn"] != "Güney"
+            and
+            not state["auction_finished"]
         ):
-            bid = "PAS"
 
-        state["bidding_history"].append({
-            "player":bot,
-            "bid":bid
-        })
+            loop_guard += 1
 
-        result = AuctionResolver.resolve(
-            state["bidding_history"]
-        )
+            if loop_guard > 20:
+                break
 
-        if result:
+            bot = state["current_turn"]
 
-            state["feedback"] = result["message"]
+            bid = AuctionAI.generate_bid(
+                state["hands"][bot],
+                state["bidding_history"]
+            )
 
-            state["auction_finished"] = True
+            if not BiddingLegalityEngine.is_legal(
+                bid,
+                state["bidding_history"]
+            ):
+                bid = "PAS"
 
-            break
+            state["bidding_history"].append({
+                "player": bot,
+                "bid": bid
+            })
 
-        state["current_turn"] = PLAYERS[
-            (
-                PLAYERS.index(bot) + 1
-            ) % 4
-        ]
+            changed = True
 
-        time.sleep(0.08)
+            result = AuctionResolver.resolve(
+                state["bidding_history"]
+            )
 
-    st.rerun()
+            if result:
+
+                state["feedback"] = result["message"]
+
+                state["auction_finished"] = True
+
+                break
+
+            state["current_turn"] = PLAYERS[
+                (
+                    PLAYERS.index(bot) + 1
+                ) % 4
+            ]
+
+        if changed:
+            st.rerun()
 
 # =========================================================
 # USER PLAY
@@ -952,13 +928,23 @@ if (
 
                 bid = ALL_BIDS[i+j]
 
-                legal = (
-                    BiddingLegalityEngine
-                    .is_legal(
-                        bid,
-                        state["bidding_history"]
+                # =================================================
+                # PAS ALWAYS LEGAL
+                # =================================================
+
+                if bid == "PAS":
+
+                    legal = True
+
+                else:
+
+                    legal = (
+                        BiddingLegalityEngine
+                        .is_legal(
+                            bid,
+                            state["bidding_history"]
+                        )
                     )
-                )
 
                 if cols[j].button(
                     bid,
@@ -971,9 +957,9 @@ if (
                         "bid":bid
                     })
 
-                    # =================================================
-                    # OPENING TRAINING
-                    # =================================================
+                    # =============================================
+                    # OPENING MODE
+                    # =============================================
 
                     if (
                         state["mode"]
@@ -993,9 +979,9 @@ if (
 
                         state["auction_finished"] = True
 
-                    # =================================================
-                    # RESPONSE TRAINING
-                    # =================================================
+                    # =============================================
+                    # RESPONSE MODE
+                    # =============================================
 
                     elif (
                         state["mode"]
@@ -1016,9 +1002,9 @@ if (
 
                         state["auction_finished"] = True
 
-                    # =================================================
+                    # =============================================
                     # TOURNAMENT MODE
-                    # =================================================
+                    # =============================================
 
                     else:
 
