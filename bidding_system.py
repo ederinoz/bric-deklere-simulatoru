@@ -153,7 +153,7 @@ def rkcb_response(ev: HandEvaluator, trump: Suit) -> tuple[str, str]:
 def suggest_response(opener_bid: str, opener_suit: Suit | None, ev: HandEvaluator, partner_hcp: int = 12) -> tuple[str, str]:
     hcp = ev.hcp()
     
-    # ZON GÜCÜ DURDURMA KİLİDİ: Toplam puan 25'i geçiyor veya tek başına 16+ varsa robot pas geçemez.
+    # ZON GÜCÜ DURDURMA KİLİDİ: 25+ toplam puan veya tek başına 16+ kuvvette pas pasifliği yasaklanır
     is_game_forcing = (partner_hcp + hcp >= 25) or (hcp >= 16)
     
     if opener_bid == "1NT": return response_to_1nt(ev)
@@ -169,7 +169,6 @@ def suggest_response(opener_bid: str, opener_suit: Suit | None, ev: HandEvaluato
                     if target: return target, f"Yeni Renk 2 Seviyesinde Tur Zorlaması ({suit_symbol(s)}, 10+ HKP)"
         
         if is_game_forcing:
-            # Puan devasa ise pas seçeneklerini ele ve direkt oyun/davet basamaklarına zorla
             if opener_suit in (Suit.HEARTS, Suit.SPADES):
                 supp = ev.length(opener_suit)
                 if supp >= 4: return "2NT", "Jacoby 2NT — Şlem ve Oyun Zorlaması (GF)"
@@ -183,7 +182,7 @@ def suggest_response(opener_bid: str, opener_suit: Suit | None, ev: HandEvaluato
     if opener_bid == "4NT" and opener_suit: return rkcb_response(ev, opener_suit)
     
     if is_game_forcing:
-        return _min_level_bid("NT", opener_bid) or "3NT", "Zon Gücü Kilidi Aktif — Pas Geçilemez, Oyun Değerli Dağılım"
+        return _min_level_bid("NT", opener_bid) or "3NT", "Zon Gücü Kilidi — Pas Geçilemez, Oyun Değerli Dağılım"
         
     if hcp < 6: return BID_PASS, "PAS"
     return BID_PASS, "PAS"
