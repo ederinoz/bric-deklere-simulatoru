@@ -9,12 +9,18 @@ from cards import deal_hands, Suit, SUIT_SYMBOLS, SUIT_NAMES_TR, RANK_SYMBOLS
 from evaluator import HandEvaluator
 import bidding_system as bs
 
+# INLINE VE UNIFIED CSS: Dark/Light fark etmeksizin kartların görünmesini ve üst üste binmesini sağlar
 st.markdown("""
     <style>
     html, body, [data-testid="stAppViewContainer"] { font-size: 15px !important; }
-    [data-testid="stAppViewContainer"] { background-color: #FAFAFA; }
     [data-testid="stMetricValue"] { font-size: 1.4rem !important; font-weight: bold; color: #1565C0; }
     .table-title { color: #2e7d32 !important; font-size: 1.35rem !important; font-weight: 800; margin-bottom: 6px; }
+    
+    /* Koltukların dikey eksende kaymasını engellemek için Flexbox Üst Sabitleme */
+    [data-testid="stHorizontalBlock"] {
+        align-items: flex-start !important;
+        gap: 0.5rem !important;
+    }
     
     .stButton>button { 
         width: 100%; border-radius: 6px; height: 3.2rem; 
@@ -22,13 +28,11 @@ st.markdown("""
         margin-bottom: 1px !important; padding: 2px 4px;
     }
     
-    .suit-symbol { font-size: 1.7rem !important; font-weight: 700; vertical-align: middle; }
-    .suit-ranks { font-family: monospace; font-size: 1.45rem !important; margin-left: 10px; font-weight: bold; vertical-align: middle; }
-    .hand-info-text { font-size: 1.15rem !important; font-weight: 600; color: #37474F; margin-top: 4px; }
+    /* Dark modda görünürlük için kart yazı zeminini garantiye alıyoruz */
+    .suit-symbol { font-size: 1.7rem !important; font-weight: 700; vertical-align: middle; display: inline-block; width: 25px; }
+    .suit-ranks { font-family: monospace; font-size: 1.45rem !important; margin-left: 12px; font-weight: bold; vertical-align: middle; color: inherit; }
+    .hand-info-text { font-size: 1.15rem !important; font-weight: 600; margin-top: 6px; }
     
-    .bid-red { color: #c62828 !important; font-weight: bold; font-size: 1.1rem; }
-    .bid-black { color: #1a1a1a !important; font-weight: bold; font-size: 1.1rem; }
-
     @media screen and (min-width: 601px) and (max-width: 1024px) {
         html, body, [data-testid="stAppViewContainer"] { font-size: 16px !important; }
         [data-testid="stHorizontalBlock"] { gap: 0.4rem !important; padding: 0px !important; }
@@ -63,9 +67,10 @@ def render_responsive_hand(ev, title, is_north=False):
     st.markdown(f"{color_title}{title}")
     for suit in reversed(list(Suit)):
         cards = ev.suit_cards(suit)
-        color = "#c62828" if suit in (Suit.HEARTS, Suit.DIAMONDS) else "#1a1a1a"
+        # INLINE HARD-CODED COLOR: Dark modun renkleri yutmasını tamamen engeller
+        color = "#e53935" if suit in (Suit.HEARTS, Suit.DIAMONDS) else "#212121"
         ranks = " ".join(RANK_SYMBOLS[c.rank] for c in sorted(cards, key=lambda c: c.rank, reverse=True)) if cards else "—"
-        st.markdown(f"<span class='suit-symbol' style='color:{color};'>{SUIT_SYMBOLS[suit]}</span><span class='suit-ranks'>{ranks}</span>", unsafe_allow_html=True)
+        st.markdown(f"<span class='suit-symbol' style='color:{color} !important;'>{SUIT_SYMBOLS[suit]}</span><span class='suit-ranks'>{ranks}</span>", unsafe_allow_html=True)
     st.markdown(f"<div class='hand-info-text'>HKP: <b>{ev.hcp()}</b> | Dağılım: <b>+{ev.distribution_points()}</b> | Toplam: <b>{ev.total_points()} TP</b></div>", unsafe_allow_html=True)
 
 def extract_suit(bid: str) -> Suit | None:
@@ -74,9 +79,10 @@ def extract_suit(bid: str) -> Suit | None:
         if sym in bid: return s
     return None
 
-def get_bid_html_class(bid: str) -> str:
-    if "♥" in bid or "♦" in bid: return "bid-red"
-    return "bid-black"
+def get_bid_style_inline(bid: str) -> str:
+    """Streamlit markdown katmanını ezip deklere tablosundaki renkleri Dark modda da sabitler"""
+    if "♥" in bid or "♦" in bid: return "color: #e53935 !important; font-weight: bold; font-size: 1.15rem;"
+    return "color: #212121 !important; font-weight: bold; font-size: 1.15rem;"
 
 def valid_bids_above(last_bid: str | None) -> list[str]:
     order = []
@@ -89,11 +95,8 @@ def valid_bids_above(last_bid: str | None) -> list[str]:
     except ValueError: return [bs.BID_PASS, bs.BID_DBL] + order[:]
 
 def is_auction_over_strict(bids: list) -> bool:
-    """KESİN İHALE KAPANMA SAYACI: Listenin sonuna bakmaksızın, art arda 3 gerçek PAS girildiğinde ihaleyi bitirir"""
     if len(bids) < 3: return False
     if len(bids) == 4 and all(b == bs.BID_PASS for _, b, _ in bids): return True
-    
-    # Sondan geriye doğru ardışık PAS sayımı yapar
     pass_streak = 0
     for _, b, _ in reversed(bids):
         if b == bs.BID_PASS:
@@ -109,14 +112,12 @@ def last_real_bid_and_pos(bids: list) -> tuple[str | None, int | None]:
     return None, None
 
 def calculate_correct_live_bid(bids: list, user_hand_ev: HandEvaluator) -> tuple[str, str]:
-    """MASA HAFIZA MOTORU (STATE ENGINE): Tüm rol ezilmelerini ve kilitlenmeleri önleyen ana köprü"""
     last_real, last_real_pos = last_real_bid_and_pos(bids)
     
     if last_real is None:
         return bs.opening_bid(user_hand_ev, seat=3)
         
     if last_real_pos == 0:
-        # DİNAMİK ORTAK HAFİZASI: Kuzey'in gerçek el analiz puanı motora gönderilir
         n_ev = HandEvaluator(st.session_state["hands"][0])
         return bs.suggest_response(last_real, extract_suit(last_real), user_hand_ev, partner_hcp=n_ev.hcp())
         
@@ -133,13 +134,12 @@ def calculate_correct_live_bid(bids: list, user_hand_ev: HandEvaluator) -> tuple
     return bs.overcall_or_double(user_hand_ev, last_real, partner_passed=partner_passed)
 
 def robot_bid_for_pos(pos: int, hands: list, bids: list) -> tuple[str, str]:
-    """KIMLIK KILITI ENTEGRASYONU: Robotun deklere verirken rakip ve ortak ayrımını kesin yapmasını sağlar"""
     ev = HandEvaluator(hands[pos])
     partner = (pos + 2) % 4
     seat = len(bids) + 1
     last_real, last_real_pos = last_real_bid_and_pos(bids)
     
-    # KIMLIK VE ORTAK KONTROLÜ: Eğer 1NT açan adam rakipse, Stayman veya Transfer kural bloklarını tetikleme!
+    # KİMLİK KİLİDİ: Eğer 1NT açan düşmansa asla Stayman/Transfer tetikleme!
     if last_real == "1NT" and last_real_pos != partner:
         partner_passed = any(b == bs.BID_PASS for p, b, _ in bids if p == partner)
         return bs.overcall_or_double(ev, last_real, partner_passed=partner_passed)
@@ -198,19 +198,17 @@ def submit_live_bid(user_bid: str):
     advance_live_robots()
 
 def new_hand_for_mode(mode: str):
-    """GÜNEY MİNİMMUM 10 HKP KANUNU FİLTRESİ: Zaman kaybettiren çöp elleri daha üretirken eler"""
+    """MİNİMMUM 10 HKP FİLTRESİ: Zaman kaybettiren elleri eler, 7'li kart baraj açışını korur"""
     for _ in range(2000):
         hands = deal_hands()
         s_ev = HandEvaluator(hands[2])
         n_ev = HandEvaluator(hands[0])
         
-        # BARAJ AÇIŞ İSTİSNASI: Herhangi bir renk tam 7 kart ise el korunur
         has_7_card_suit = any(s_ev.length(suit) >= 7 for suit in Suit)
         
-        # Güney eli kuralları (Mod 1 ve Mod 2 için geçerli)
         if mode in ("opening", "response"):
             if not has_7_card_suit and s_ev.hcp() < 10:
-                continue  # 10 puandan düşük çöp el ise kartı çöpe at, yeniden dağıt
+                continue
                 
         nb, _ = bs.opening_bid(n_ev, seat=1)
         if mode == "opening": return hands
@@ -247,7 +245,6 @@ def submit_bid(user_bid: str):
         if st.session_state["rkcb_active"]:
             correct, explanation = bs.rkcb_response(s_ev, st.session_state["trump"] or Suit.SPADES)
         else:
-            # DİNAMİK ORTAK HAFİZASI ENTEGRASYONU: Karar motoruna ortağın gerçek puanı gönderilir
             correct, explanation = bs.suggest_response(st.session_state["north_bid"], extract_suit(st.session_state["north_bid"]), s_ev, partner_hcp=n_ev.hcp())
             if user_bid == "4NT" and correct == "4NT":
                 st.session_state["rkcb_active"] = True
@@ -309,8 +306,8 @@ if mode == "live":
     with lc2:
         st.markdown(f"**Dağıtıcı:** {POS_NAMES[st.session_state['live_dealer']]} | **Masa Akışı**")
         for p, b, e in bids:
-            cls = get_bid_html_class(b)
-            st.markdown(f"{POS_EMOJI[p]} **{POS_NAMES[p]}**: <span class='{cls}'>`{b}`</span> — {e}", unsafe_allow_html=True)
+            style_inline = get_bid_style_inline(b)
+            st.markdown(f"{POS_EMOJI[p]} **{POS_NAMES[p]}**: <span style='{style_inline}'>`{b}`</span> — {e}", unsafe_allow_html=True)
             
     if st.session_state["live_feedback"]:
         if st.session_state["live_feedback_ok"]: 
