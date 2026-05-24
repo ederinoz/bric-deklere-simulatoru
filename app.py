@@ -2,12 +2,12 @@ import streamlit as st
 import random
 
 # =========================================================
-# TBF BRİÇ AKADEMİ v40.0
-# SINGLE TOURNAMENT MODE
+# TBF BRİÇ AKADEMİ v41.0
+# FULL STABLE TOURNAMENT EDITION
 # =========================================================
 
 st.set_page_config(
-    page_title="TBF Briç Akademi v40.0",
+    page_title="TBF Briç Akademi v41.0",
     layout="centered"
 )
 
@@ -43,6 +43,7 @@ st.markdown("""
     white-space:nowrap;
     margin-bottom:12px;
     font-size:17px;
+    text-align:center;
 }
 
 .result-box{
@@ -92,19 +93,9 @@ SUIT_ORDER = {
 }
 
 CARD_RANK = {
-    '2':2,
-    '3':3,
-    '4':4,
-    '5':5,
-    '6':6,
-    '7':7,
-    '8':8,
-    '9':9,
-    '10':10,
-    'J':11,
-    'Q':12,
-    'K':13,
-    'A':14
+    '2':2,'3':3,'4':4,'5':5,'6':6,
+    '7':7,'8':8,'9':9,'10':10,
+    'J':11,'Q':12,'K':13,'A':14
 }
 
 ALL_BIDS = [
@@ -233,8 +224,12 @@ class BiddingLegalityEngine:
     @staticmethod
     def is_legal(proposed, history):
 
+        # PAS always legal
+
         if proposed == "PAS":
             return True
+
+        # no previous real bid
 
         bids = [
 
@@ -256,16 +251,23 @@ class BiddingLegalityEngine:
                 "XX"
             ]
 
+        # DOUBLE
+
         if proposed == "X":
 
             return history[-1]["bid"] not in [
+                "PAS",
                 "X",
                 "XX"
             ]
 
+        # REDOUBLE
+
         if proposed == "XX":
 
             return history[-1]["bid"] == "X"
+
+        # NORMAL BID
 
         ll = int(bids[-1][0])
         ls = bids[-1][1:]
@@ -284,7 +286,7 @@ class BiddingLegalityEngine:
         )
 
 # =========================================================
-# AI
+# AUCTION AI
 # =========================================================
 
 class AuctionAI:
@@ -304,7 +306,7 @@ class AuctionAI:
         candidates = []
 
         # =====================================================
-        # RESPONSE LOGIC
+        # RESPONSES
         # =====================================================
 
         if history:
@@ -323,7 +325,7 @@ class AuctionAI:
 
                     candidates.append("2♣")
 
-            # support raises
+            # Support Raises
 
             if partner_bid == "1♠":
 
@@ -347,18 +349,20 @@ class AuctionAI:
                     else:
                         candidates.append("4♥")
 
-            # simple overcalls
+        # =====================================================
+        # PREEMPTS
+        # =====================================================
 
-            if hcp >= 9:
+        if hcp <= 10:
 
-                if sp >= 5:
-                    candidates.append("2♠")
+            if sp >= 7:
+                candidates.append("3♠")
 
-                if he >= 5:
-                    candidates.append("2♥")
+            if he >= 7:
+                candidates.append("3♥")
 
         # =====================================================
-        # OPENING LOGIC
+        # OPENINGS
         # =====================================================
 
         if (
@@ -379,6 +383,8 @@ class AuctionAI:
                 candidates.append("1♦")
             else:
                 candidates.append("1♣")
+
+        # fallback
 
         candidates.append("PAS")
 
@@ -408,7 +414,7 @@ class AuctionResolver:
         if len(history) < 4:
             return None
 
-        # pass out
+        # PASS OUT
 
         if all(
             h["bid"] == "PAS"
@@ -420,7 +426,7 @@ class AuctionResolver:
                     "Tüm oyuncular PAS dedi. El pas geçti."
             }
 
-        # contract
+        # NORMAL CONTRACT
 
         last_three = history[-3:]
 
@@ -483,11 +489,11 @@ def init_game():
 # SESSION
 # =========================================================
 
-if "bridge_v40" not in st.session_state:
+if "bridge_v41" not in st.session_state:
 
-    st.session_state.bridge_v40 = init_game()
+    st.session_state.bridge_v41 = init_game()
 
-state = st.session_state.bridge_v40
+state = st.session_state.bridge_v41
 
 # =========================================================
 # SIDEBAR
@@ -501,7 +507,7 @@ with st.sidebar:
 
     if st.button("🔄 Yeni El"):
 
-        st.session_state.bridge_v40 = init_game()
+        st.session_state.bridge_v41 = init_game()
 
         st.rerun()
 
@@ -509,7 +515,7 @@ with st.sidebar:
 # TITLE
 # =========================================================
 
-st.title("🃏 TBF Briç Akademi v40.0")
+st.title("🃏 TBF Briç Akademi v41.0")
 
 # =========================================================
 # SOUTH HAND
@@ -591,7 +597,7 @@ if state["feedback"] is not None:
 
     if st.button("➡ Yeni Ele Geç"):
 
-        st.session_state.bridge_v40 = init_game()
+        st.session_state.bridge_v41 = init_game()
 
         st.rerun()
 
@@ -627,6 +633,8 @@ if (
             state["hands"][bot],
             state["bidding_history"]
         )
+
+        # safety legality
 
         if not BiddingLegalityEngine.is_legal(
             bid,
